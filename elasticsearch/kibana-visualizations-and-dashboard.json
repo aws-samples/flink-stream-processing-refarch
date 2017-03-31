@@ -1,0 +1,55 @@
+[
+  {
+    "_id": "Taxi-Trips-Dashboard",
+    "_type": "dashboard",
+    "_source": {
+      "title": "Taxi Trips Dashboard",
+      "hits": 0,
+      "description": "",
+      "panelsJSON": "[{\"id\":\"Areas-with-high-pickup-rates\",\"type\":\"visualization\",\"panelIndex\":1,\"size_x\":6,\"size_y\":6,\"col\":1,\"row\":1},{\"id\":\"Average-trip-duration-to-JFK-and-LGA\",\"type\":\"visualization\",\"panelIndex\":2,\"size_x\":6,\"size_y\":6,\"col\":7,\"row\":1}]",
+      "optionsJSON": "{\"darkTheme\":false}",
+      "uiStateJSON": "{\"P-1\":{\"mapCenter\":[40.6827208759455,-73.94142150878906]},\"P-2\":{\"vis\":{\"legendOpen\":true}}}",
+      "version": 1,
+      "timeRestore": true,
+      "timeTo": "2016-01-03T23:00:00.000Z",
+      "timeFrom": "2015-12-31T23:00:00.000Z",
+      "refreshInterval": {
+        "display": "30 seconds",
+        "pause": false,
+        "section": 1,
+        "value": 30000
+      },
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"filter\":[{\"query\":{\"query_string\":{\"query\":\"*\",\"analyze_wildcard\":true}}}]}"
+      }
+    }
+  },
+  {
+    "_id": "Areas-with-high-pickup-rates",
+    "_type": "visualization",
+    "_source": {
+      "title": "Areas with high pickup rates",
+      "visState": "{\"title\":\"Areas with high pickup rates\",\"type\":\"tile_map\",\"params\":{\"mapType\":\"Shaded Geohash Grid\",\"isDesaturated\":true,\"addTooltip\":true,\"heatMaxZoom\":16,\"heatMinOpacity\":0.1,\"heatRadius\":25,\"heatBlur\":15,\"heatNormalizeData\":true,\"legendPosition\":\"bottomright\",\"mapZoom\":2,\"mapCenter\":[15,5],\"wms\":{\"enabled\":true,\"url\":\"https://basemap.nationalmap.gov/arcgis/services/USGSTopo/MapServer/WMSServer\",\"options\":{\"version\":\"1.3.0\",\"layers\":\"0\",\"format\":\"image/png\",\"transparent\":true,\"attribution\":\"Maps provided by USGS\",\"styles\":\"\"}}},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"sum\",\"schema\":\"metric\",\"params\":{\"field\":\"pickup_count\",\"customLabel\":\"Number of trips started\"}},{\"id\":\"2\",\"enabled\":true,\"type\":\"geohash_grid\",\"schema\":\"segment\",\"params\":{\"field\":\"location\",\"autoPrecision\":true}}],\"listeners\":{}}",
+      "uiStateJSON": "{\"mapZoom\":11,\"mapCenter\":[40.781581302919285,-73.86589050292969]}",
+      "description": "",
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"taxi-dashboard\",\"query\":{\"query_string\":{\"query\":\"_type:pickup_count\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  },
+  {
+    "_id": "Average-trip-duration-to-JFK-and-LGA",
+    "_type": "visualization",
+    "_source": {
+      "title": "Average trip duration to JFK and LGA",
+      "visState": "{\"title\":\"Average trip duration to JFK and LGA\",\"type\":\"line\",\"params\":{\"shareYAxis\":true,\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"showCircles\":true,\"smoothLines\":true,\"interpolate\":\"linear\",\"scale\":\"linear\",\"drawLinesBetweenPoints\":true,\"radiusRatio\":9,\"times\":[],\"addTimeMarker\":false,\"defaultYExtents\":false,\"setYExtents\":false,\"yAxis\":{}},\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"avg\",\"schema\":\"metric\",\"params\":{\"field\":\"avg_trip_duration\",\"cutomLabel\":\"Average trip duration in minutes\"}},{\"id\":\"2\",\"enabled\":true,\"type\":\"date_histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"timestamp\",\"interval\":\"m\",\"customInterval\":\"2h\",\"min_doc_count\":1,\"extended_bounds\":{}}},{\"id\":\"3\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"group\",\"params\":{\"field\":\"airport_code\",\"size\":5,\"order\":\"desc\",\"orderBy\":\"1\"}}],\"listeners\":{}}",
+      "uiStateJSON": "{}",
+      "description": "",
+      "version": 1,
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"index\":\"taxi-dashboard\",\"query\":{\"query_string\":{\"query\":\"_type:trip_duration\",\"analyze_wildcard\":true}},\"filter\":[]}"
+      }
+    }
+  }
+]
