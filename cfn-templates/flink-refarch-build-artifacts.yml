@@ -112,7 +112,7 @@ Resources:
           def handler(event, context):
             s3 = boto3.client('s3')
 
-            flink = urllib2.urlopen('https://github.com/apache/flink/archive/release-1.2.0.zip')
+            flink = urllib2.urlopen('https://github.com/apache/flink/archive/release-1.3.1.zip')
             s3.put_object(Bucket='${ArtifactBucket}',Key='sources/flink-src.zip',Body=flink.read())
 
             runtime_artifacts = urllib2.urlopen('https://github.com/awslabs/flink-stream-processing-refarch/archive/master.zip')
