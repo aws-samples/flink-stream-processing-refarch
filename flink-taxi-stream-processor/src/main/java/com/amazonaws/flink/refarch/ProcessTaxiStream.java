@@ -30,6 +30,7 @@ import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -43,6 +44,7 @@ import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.Properties;
 import java.util.stream.StreamSupport;
 
@@ -69,7 +71,7 @@ public class ProcessTaxiStream {
         kinesisConsumerConfig.setProperty(AWSConfigConstants.AWS_CREDENTIALS_PROVIDER, "AUTO");
         kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_MAX, "10000");
         kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_BACKOFF_BASE, "500");
-        kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_INTERVAL_MILLIS, "200");
+        kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_INTERVAL_MILLIS, "2000");
 
         DataStream<Event> kinesisStream = env.addSource(new FlinkKinesisConsumer<>(
                 pt.get("stream", DEFAULT_STREAM_NAME),
@@ -130,7 +132,13 @@ public class ProcessTaxiStream {
 
 
         if (pt.has("checkpoint")) {
-            env.enableCheckpointing(5000);
+            env.enableCheckpointing(5_000);
+
+            if (pt.get("checkpoint") == null || !"".equals(pt.get("checkpoint"))) {
+                env.setStateBackend(new RocksDBStateBackend(new URI(pt.get("checkpoint"))));
+
+                LOG.info("writing checkpoints to {}", pt.get("checkpoint"));
+            }
         }
 
         if (pt.has("es-endpoint")) {

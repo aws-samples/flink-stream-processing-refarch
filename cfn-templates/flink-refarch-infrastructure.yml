@@ -30,13 +30,21 @@ Outputs:
     Description: EMR master node SSH connection
     Value: !Sub ssh -C -D 8157 hadoop@${FlinkCluster.MasterPublicDNS}
 
+  EmrSetup:
+    Description: Install Flink 1.3.2
+    Value: curl http://archive.apache.org/dist/flink/flink-1.3.2/flink-1.3.2-bin-hadoop27-scala_2.10.tgz | tar xz
+
+  StartFlinkDemon:
+    Description: Start Flink Demon
+    Value: HADOOP_CONF_DIR=/etc/hadoop/conf ~/flink-1.?.?/bin/yarn-session.sh -n 5 -s 4 -tm 4096 -d
+
   FlinkCommand:
     Description: Command to invoke Flink job on the EMR cluster
-    Value: !Sub flink run -p 8 flink-taxi-stream-processor-1.0.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint
+    Value: !Sub ~/flink-1.?.?/bin/flink run -p 20 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint
 
   ProducerCommand:
     Description: Command to populate Kinesis stream with taxi trip events
-    Value: !Sub java -jar kinesis-taxi-stream-producer-1.0.jar -speedup 1440 -stream ${KinesisStream} -region ${AWS::Region}
+    Value: !Sub java -jar kinesis-taxi-stream-producer-1.1-SNAPSHOT.jar -speedup 2880 -stream ${KinesisStream} -region ${AWS::Region}
 
 Resources:
   AttachGateway:
@@ -199,7 +207,7 @@ Resources:
   KinesisStream:
     Type: AWS::Kinesis::Stream
     Properties:
-      ShardCount: 8
+      ShardCount: 16
 
   ElasticSearch:
     Type: AWS::Elasticsearch::Domain
@@ -234,12 +242,12 @@ Resources:
           }
       ElasticsearchClusterConfig:
         InstanceCount: 1
-        InstanceType: t2.small.elasticsearch
+        InstanceType: m3.medium.elasticsearch
       EBSOptions:
         EBSEnabled: true
         VolumeType: gp2
         VolumeSize: 10
-      ElasticsearchVersion: 5.1
+      ElasticsearchVersion: 5.3
       AdvancedOptions:
         rest.action.multi.allow_explicit_index: true
 
@@ -251,6 +259,7 @@ Resources:
         - Name: Hadoop
         - Name: Ganglia
         - Name: Flink
+        - Name: ZooKeeper
       Instances:
         MasterInstanceGroup:
           InstanceCount: 1
@@ -258,7 +267,7 @@ Resources:
           Market: ON_DEMAND
           Name: Master
         CoreInstanceGroup:
-          InstanceCount: 2
+          InstanceCount: 5
           InstanceType: c4.xlarge
           Market: ON_DEMAND
           Name: Core
@@ -295,6 +304,7 @@ Resources:
           - AWSInstanceType2Arch
           - m4.xlarge
           - Arch
+      Monitoring: true
       InstanceType: m4.xlarge
       IamInstanceProfile: !Ref ProducerInstanceProfile
       KeyName: !Ref KeyName
@@ -324,6 +334,71 @@ Resources:
             curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/index-pattern/taxi-dashboard -d '{"title" : "taxi-dashboard",  "timeFieldName": "timestamp"}'
             curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/config/5.1.1 -d '{"defaultIndex" : "taxi-dashboard"}'
             curl -s https://raw.githubusercontent.com/awslabs/flink-stream-processing-refarch/master/elasticsearch/kibana-visualizations-and-dashboard.json | jq -rc '.[]' | while read -r item; do jq -rn "$item | ._source" | curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/$(jq -rn "$item | [._type,._id] | join(\"/\")") -d @-; done
+
+  FlinkDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${AWS::StackName}-dashboard
+      DashboardBody: !Sub |
+        {
+            "widgets": [
+                {
+                    "type": "metric",
+                    "x": 0,
+                    "y": 0,
+                    "width": 21,
+                    "height": 6,
+                    "properties": {
+                        "view": "timeSeries",
+                        "stacked": false,
+                        "metrics": [
+                            [ "AWS/Kinesis", "IncomingRecords", "StreamName", "${KinesisStream}", { "period": 60, "stat": "Sum" } ],
+                            [ ".", "ReadProvisionedThroughputExceeded", ".", ".", { "period": 60, "yAxis": "right" } ],
+                            [ ".", "WriteProvisionedThroughputExceeded", ".", ".", { "period": 60, "yAxis": "right" } ]
+                        ],
+                        "region": "eu-west-1"
+                    }
+                },
+                {
+                    "type": "metric",
+                    "x": 0,
+                    "y": 12,
+                    "width": 21,
+                    "height": 6,
+                    "properties": {
+                        "view": "timeSeries",
+                        "stacked": false,
+                        "metrics": [
+                            [ "AWS/EC2", "CPUUtilization", "InstanceId", "${ProducerInstance}", { "period": 60 } ],
+                            [ ".", "NetworkOut", ".", ".", { "period": 60, "yAxis": "right" } ],
+                            [ "KinesisProducerLibrary", "BufferingTime", "StreamName", "${KinesisStream}", { "period": 60 } ]
+                        ],
+                        "region": "eu-west-1",
+                        "yAxis": {
+                            "left": {
+                                "max": 100
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "metric",
+                    "x": 0,
+                    "y": 6,
+                    "width": 21,
+                    "height": 6,
+                    "properties": {
+                        "view": "timeSeries",
+                        "stacked": false,
+                        "metrics": [
+                            [ "AWS/Kinesis", "GetRecords.IteratorAgeMilliseconds", "StreamName", "${KinesisStream}", { "period": 60 } ],
+                            [ "...", { "period": 60, "stat": "Maximum", "yAxis": "right" } ]
+                        ],
+                        "region": "eu-west-1"
+                    }
+                }
+            ]
+        }
 
 Mappings:
   AWSInstanceType2Arch:

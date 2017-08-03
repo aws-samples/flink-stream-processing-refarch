@@ -62,8 +62,8 @@ public class StreamPopulator
     public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, float speedupFactor, boolean noWatermark) {
         KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
                 .setRegion(region)
-                .setRecordMaxBufferedTime(3000)
-                .setAggregationEnabled(false);
+                .setCredentialsRefreshDelay(500)
+                .setAggregationEnabled(true);
 
         AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
         AmazonKinesis kinesis = AmazonKinesisClientBuilder.standard().withRegion(region).build();
@@ -134,7 +134,7 @@ public class StreamPopulator
 
             LOG.debug("send watermark {}", new DateTime(timestamp));
         } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
-            LOG.warn("skipping watermark due to limit exceeded exception");
+            LOG.warn("skipping watermark due to limit exceeded exception: {}", e.getLocalizedMessage());
         }
 
     }
@@ -207,6 +207,8 @@ public class StreamPopulator
                 statisticsLastOutputTimeslot = (System.currentTimeMillis()-timeZeroSystem)/STAT_INTERVAL_MILLIS;
             }
         }
+
+        LOG.info("all events have been sent");
 
         kinesisProducer.flushSync();
         kinesisProducer.destroy();
