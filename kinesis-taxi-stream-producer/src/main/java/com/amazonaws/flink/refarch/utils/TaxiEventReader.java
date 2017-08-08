@@ -13,7 +13,7 @@
  * permissions and limitations under the License.
  */
 
-package com.amazonaws.flink.refarch;
+package com.amazonaws.flink.refarch.utils;
 
 import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.services.s3.AmazonS3;
