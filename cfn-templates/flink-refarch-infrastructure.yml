@@ -268,7 +268,7 @@ Resources:
           - !Ref SshSecurityGroup
       JobFlowRole : !Ref EmrInstanceProfile
       ServiceRole : EMR_DefaultRole
-      ReleaseLabel: emr-5.4.0
+      ReleaseLabel: emr-5.8.0
       VisibleToAllUsers: true
 
   ProducerInstanceIp:
