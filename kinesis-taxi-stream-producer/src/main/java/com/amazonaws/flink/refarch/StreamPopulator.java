@@ -11,6 +11,7 @@
  * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
  * express or implied. See the License for the specific language governing
  * permissions and limitations under the License.
+ *
  */
 
 package com.amazonaws.flink.refarch;
@@ -37,11 +38,14 @@ public class StreamPopulator
 {
     private static final Logger LOG = LoggerFactory.getLogger(StreamPopulator.class);
 
-    /** sent a watermark every WATERMARK_MILLIS ms or WATERMARK_EVENT_COUNT events, whaterver comes first */
+    /** sent a watermark every WATERMARK_MILLIS ms or WATERMARK_EVENT_COUNT events, whatever comes first */
     private static final long WATERMARK_MILLIS = 5_000;
     private static final long WATERMARK_EVENT_COUNT = 100_000;
 
+    /** sleep for at lease MIN_SLEEP_MILLIS if no events need to be sent to Kinesis */
     private static final long MIN_SLEEP_MILLIS = 5;
+
+    /** print statistics every STAT_INTERVAL_MILLIS ms */
     private static final long STAT_INTERVAL_MILLIS = 60_000;
 
     private final String streamName;
@@ -112,6 +116,7 @@ public class StreamPopulator
             double replayTimeGap = timeDeltaSystem - timeDeltaLog;
 
             if (replayTimeGap < 0) {
+                // wait until replay time has caught up with the time in the
                 try {
                     long sleepTime = (long) Math.max(-replayTimeGap / speedupFactor, MIN_SLEEP_MILLIS);
 
@@ -120,28 +125,33 @@ public class StreamPopulator
                     LOG.error(e.getMessage());
                 }
             } else {
+                //queue the next event for ingestion to the Kinesis stream
+                ListenableFuture<UserRecordResult> f = kinesisProducer.addUserRecord(streamName, Integer.toString(nextEvent.hashCode()), nextEvent.payload);
+
+                //monitor if the event has actually been sent and adapt the global watermark value accordingly
+                watermarkTracker.trackTimestamp(f, nextEvent);
+
                 watermarkBatchEventCount++;
                 statisticsBatchEventCount++;
 
                 LOG.trace("sent event {}", nextEvent);
 
-                ListenableFuture<UserRecordResult> f = kinesisProducer.addUserRecord(streamName, Integer.toString(nextEvent.hashCode()), nextEvent.payload);
-                watermarkTracker.trackTimestamp(f, nextEvent);
-
                 if (taxiEventReader.hasNext()) {
                     nextEvent = taxiEventReader.next();
                 } else {
+                    //terminate if there are no more events to replay
                     break;
                 }
             }
 
-            long timeSinceLastWatermark = System.currentTimeMillis() - lastWatermarkSentTime;
+            //emit a watermark to every shard of the Kinesis stream every WATERMARK_MILLIS or WATERMARK_EVENT_COUNT, whatever comes first
+            if (System.currentTimeMillis() - lastWatermarkSentTime >= WATERMARK_MILLIS || watermarkBatchEventCount >= WATERMARK_EVENT_COUNT) {
+                lastWatermark = watermarkTracker.sentWatermark(nextEvent);
 
-            if (timeSinceLastWatermark >= WATERMARK_MILLIS || watermarkBatchEventCount >= WATERMARK_EVENT_COUNT) {
                 watermarkBatchEventCount = 0;
                 lastWatermarkSentTime = System.currentTimeMillis();
-                lastWatermark = watermarkTracker.sentWatermark(nextEvent);
             }
+
 
             if ((System.currentTimeMillis()-timeZeroSystem)/STAT_INTERVAL_MILLIS != statisticsLastOutputTimeslot) {
                 double statisticsBatchEventRate = Math.round(1000.0 * statisticsBatchEventCount / STAT_INTERVAL_MILLIS);
@@ -159,5 +169,4 @@ public class StreamPopulator
         kinesisProducer.flushSync();
         kinesisProducer.destroy();
     }
-
 }

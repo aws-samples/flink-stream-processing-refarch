@@ -1,3 +1,19 @@
+/*
+ * Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"). You may
+ * not use this file except in compliance with the License. A copy of the
+ * License is located at
+ *
+ *    http://aws.amazon.com/apache2.0/
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ */
+
 package com.amazonaws.flink.refarch.utils;
 
 import com.amazonaws.flink.refarch.events.TripEvent;
@@ -13,7 +29,9 @@ import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.PriorityBlockingQueue;
 
 /**
  * Created by shausma on 8/8/17.
@@ -29,7 +47,7 @@ public class WatermarkTracker {
     private final long SHARD_REFRESH_MILLIES = 10_000;
     private static final Logger LOG = LoggerFactory.getLogger(WatermarkTracker.class);
 
-    private final SortedSet<TripEvent> inflightEvents = Collections.synchronizedSortedSet(new TreeSet<>());
+    private final PriorityBlockingQueue<TripEvent> inflightEvents = new PriorityBlockingQueue<>();
 
 
     public WatermarkTracker(String region, String streamName) {
@@ -39,8 +57,10 @@ public class WatermarkTracker {
 
 
     public long sentWatermark(TripEvent nextEvent) {
+        //determine the larges possible wartermark value
         refreshWatermark(nextEvent);
 
+        //ingest the watermark to every shard of the Kinesis stream
         new Thread(this::sentWatermark).start();
 
         return currentWatermark;
@@ -49,12 +69,14 @@ public class WatermarkTracker {
 
     private void sentWatermark() {
         try {
+            //refresh the list of available shards, if enough time has passed
             if (System.currentTimeMillis() - lastShardRefreshTime >= SHARD_REFRESH_MILLIES) {
                 refreshShards();
 
                 lastShardRefreshTime = System.currentTimeMillis();
             }
 
+            //send a watermark to every shard of the Kinesis stream
             shards.parallelStream()
                     .map(shard -> new PutRecordRequest()
                             .withStreamName(streamName)
@@ -66,16 +88,19 @@ public class WatermarkTracker {
 
             LOG.debug("send watermark {}", new DateTime(currentWatermark));
         } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
+
+            //if any request is throttled, just wait for the next iteration to submit another watermark
             LOG.warn("skipping watermark due to limit exceeded exception");
         }
     }
 
-
     private void refreshWatermark(TripEvent nextEvent) {
-        try {
-            currentWatermark = inflightEvents.first().timestamp - 1;
-        } catch (NoSuchElementException e) {
+        TripEvent oldestEvent = inflightEvents.poll();
+
+        if (oldestEvent == null) {
             currentWatermark = nextEvent.timestamp - 1;
+        } else {
+            currentWatermark = oldestEvent.timestamp - 1;
         }
     }
 
@@ -103,6 +128,7 @@ public class WatermarkTracker {
 
 
     public void trackTimestamp(ListenableFuture<UserRecordResult> f, TripEvent event) {
+        //add event (and it's timestamp) to a priority queue and remove it when it has eventually been sent to the Kinesis stream
         Futures.addCallback(f, new RemoveTimestampCallback(event));
     }
 
