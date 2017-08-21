@@ -33,9 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.PriorityBlockingQueue;
 
-/**
- * Created by shausma on 8/8/17.
- */
+
 public class WatermarkTracker {
     private final String streamName;
     private final AmazonKinesis kinesisClient;

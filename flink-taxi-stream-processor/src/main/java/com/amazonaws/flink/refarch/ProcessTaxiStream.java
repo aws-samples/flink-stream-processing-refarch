@@ -73,18 +73,16 @@ public class ProcessTaxiStream {
         kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_BACKOFF_BASE, "500");
         kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_INTERVAL_MILLIS, "2000");
 
-        CheckpointConfig checkpointConfig = env.getCheckpointConfig();
-        checkpointConfig.enableExternalizedCheckpoints(CheckpointConfig.ExternalizedCheckpointCleanup.DELETE_ON_CANCELLATION);
 
-        
         DataStream<Event> kinesisStream = env.addSource(new FlinkKinesisConsumer<>(
                 pt.get("stream", DEFAULT_STREAM_NAME),
                 new EventSchema(),
                 kinesisConsumerConfig)
-        );
+            );
 
 
         DataStream<TripEvent> trips = kinesisStream
+                .rebalance()
                 .assignTimestampsAndWatermarks(new PunctuatedAssigner())
                 .filter(event -> TripEvent.class.isAssignableFrom(event.getClass()))
                 .map(event -> (TripEvent) event)
@@ -136,9 +134,12 @@ public class ProcessTaxiStream {
 
 
         if (pt.has("checkpoint")) {
-            env.enableCheckpointing(5_000);
+            env.enableCheckpointing(20_000);
 
             if (pt.get("checkpoint") == null || !"".equals(pt.get("checkpoint"))) {
+                CheckpointConfig checkpointConfig = env.getCheckpointConfig();
+                checkpointConfig.enableExternalizedCheckpoints(CheckpointConfig.ExternalizedCheckpointCleanup.DELETE_ON_CANCELLATION);
+
                 env.setStateBackend(new RocksDBStateBackend(new URI(pt.get("checkpoint"))));
 
                 LOG.info("writing checkpoints to {}", pt.get("checkpoint"));

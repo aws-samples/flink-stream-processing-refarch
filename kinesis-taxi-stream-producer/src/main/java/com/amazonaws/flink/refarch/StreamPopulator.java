@@ -19,7 +19,6 @@ package com.amazonaws.flink.refarch;
 import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.flink.refarch.utils.TaxiEventReader;
 import com.amazonaws.flink.refarch.utils.WatermarkTracker;
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesis.producer.KinesisProducer;
 import com.amazonaws.services.kinesis.producer.KinesisProducerConfiguration;
 import com.amazonaws.services.kinesis.producer.UserRecordResult;
@@ -46,7 +45,8 @@ public class StreamPopulator
     private static final long MIN_SLEEP_MILLIS = 5;
 
     /** print statistics every STAT_INTERVAL_MILLIS ms */
-    private static final long STAT_INTERVAL_MILLIS = 60_000;
+    private static final long STAT_INTERVAL_MILLIS = 20_000;
+
 
     private final String streamName;
     private final float speedupFactor;
@@ -59,17 +59,17 @@ public class StreamPopulator
         KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
                 .setRegion(region)
                 .setCredentialsRefreshDelay(500)
+                .setRecordTtl(300_000)
+                .setRateLimit(100)
                 .setAggregationEnabled(aggregate);
 
-        AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
+        AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(region).build();      //FIXME
 
         this.streamName = streamName;
         this.speedupFactor = speedupFactor;
         this.kinesisProducer = new KinesisProducer(producerConfiguration);
         this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
         this.watermarkTracker = new WatermarkTracker(region, streamName);
-
-        LOG.info("Starting to populate stream {}", streamName);
     }
 
 
@@ -91,15 +91,15 @@ public class StreamPopulator
         } else {
             StreamPopulator populator = new StreamPopulator(
                     line.getOptionValue("region", "eu-west-1"),
-                    line.getOptionValue("bucket", "aws-bigdata-blog"),
-                    line.getOptionValue("prefix", "artifacts/flink-refarch/data/"),
+                    line.getOptionValue("bucket", "shausma-nyc-taxi"),
+                    line.getOptionValue("prefix", "data/nyc-tlc-trips.snz/"),
                     line.getOptionValue("stream", "taxi-trip-events"),
                     line.hasOption("aggregate"),
                     Float.valueOf(line.getOptionValue("speedup", "1440"))
             );
 
             if (line.hasOption("seek")) {
-                populator.seek(new DateTime(line.getOptionValue("seek")).getMillis());
+                populator.seek(new DateTime(line.getOptionValue("seek")));
             }
 
             populator.populate();
@@ -107,8 +107,10 @@ public class StreamPopulator
     }
 
 
-    private void seek(long timestamp) {
-        taxiEventReader.seek(timestamp);
+    private void seek(DateTime timestamp) {
+        LOG.info("skipping events with timestamps lower than {}", timestamp);
+
+        taxiEventReader.seek(timestamp.getMillis());
     }
 
 
@@ -121,6 +123,8 @@ public class StreamPopulator
 
         final long timeZeroSystem = System.currentTimeMillis();
         final long timeZeroLog = nextEvent.timestamp;
+
+        LOG.info("starting to populate stream {}", streamName);
 
         while (true) {
             double timeDeltaSystem = (System.currentTimeMillis() - timeZeroSystem)*speedupFactor;
@@ -137,10 +141,10 @@ public class StreamPopulator
                     LOG.error(e.getMessage());
                 }
             } else {
-                //queue the next event for ingestion to the Kinesis stream
+                //queue the next event for ingestion to the Kinesis stream through the KPL
                 ListenableFuture<UserRecordResult> f = kinesisProducer.addUserRecord(streamName, Integer.toString(nextEvent.hashCode()), nextEvent.payload);
 
-                //monitor if the event has actually been sent and adapt the global watermark value accordingly
+                //monitor if the event has actually been sent and adapt the largest possible watermark value accordingly
                 watermarkTracker.trackTimestamp(f, nextEvent);
 
                 watermarkBatchEventCount++;
@@ -149,6 +153,7 @@ public class StreamPopulator
                 LOG.trace("sent event {}", nextEvent);
 
                 if (taxiEventReader.hasNext()) {
+                    //pre-fetch next event
                     nextEvent = taxiEventReader.next();
                 } else {
                     //terminate if there are no more events to replay
@@ -156,7 +161,7 @@ public class StreamPopulator
                 }
             }
 
-            //emit a watermark to every shard of the Kinesis stream every WATERMARK_MILLIS or WATERMARK_EVENT_COUNT, whatever comes first
+            //emit a watermark to every shard of the Kinesis stream every WATERMARK_MILLIS ms or WATERMARK_EVENT_COUNT events, whatever comes first
             if (System.currentTimeMillis() - lastWatermarkSentTime >= WATERMARK_MILLIS || watermarkBatchEventCount >= WATERMARK_EVENT_COUNT) {
                 lastWatermark = watermarkTracker.sentWatermark(nextEvent);
 
@@ -164,7 +169,7 @@ public class StreamPopulator
                 lastWatermarkSentTime = System.currentTimeMillis();
             }
 
-
+            //output statistics every STAT_INTERVAL_MILLIS ms
             if ((System.currentTimeMillis()-timeZeroSystem)/STAT_INTERVAL_MILLIS != statisticsLastOutputTimeslot) {
                 double statisticsBatchEventRate = Math.round(1000.0 * statisticsBatchEventCount / STAT_INTERVAL_MILLIS);
                 long replayLag = Math.round(replayTimeGap/speedupFactor/1000);
