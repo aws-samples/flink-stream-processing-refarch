@@ -60,7 +60,7 @@ public class WatermarkTracker {
         //determine the larges possible wartermark value
         refreshWatermark(nextEvent);
 
-        //ingest the watermark to every shard of the Kinesis stream
+        //asynchronously ingest the watermark to every shard of the Kinesis stream
         new Thread(this::sentWatermark).start();
 
         return currentWatermark;
@@ -69,7 +69,7 @@ public class WatermarkTracker {
 
     private void sentWatermark() {
         try {
-            //refresh the list of available shards, if enough time has passed
+            //refresh the list of available shards, if current state is too old
             if (System.currentTimeMillis() - lastShardRefreshTime >= SHARD_REFRESH_MILLIES) {
                 refreshShards();
 

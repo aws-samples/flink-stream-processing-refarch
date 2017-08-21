@@ -49,6 +49,12 @@ public class TaxiEventReader implements Iterator<TripEvent>
         next();
     }
 
+    public void seek(long timestamp) {
+        while (next.timestamp < timestamp && hasNext) {
+            next();
+        }
+    }
+
     @Override
     public boolean hasNext() {
         return hasNext;

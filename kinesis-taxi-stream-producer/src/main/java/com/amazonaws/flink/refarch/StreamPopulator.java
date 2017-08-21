@@ -81,6 +81,7 @@ public class StreamPopulator
                 .addOption("stream", true, "the name of the kinesis stream the events are sent to")
                 .addOption("speedup", true, "the speedup factor for replaying events into the kinesis stream")
                 .addOption("aggregate", "turn on aggregation of multiple events into a kinesis record")
+                .addOption("seek", true, "start replaying events at given timestamp")
                 .addOption("help", "print this help message");
 
         CommandLine line = new DefaultParser().parse(options, args);
@@ -88,15 +89,26 @@ public class StreamPopulator
         if (line.hasOption("help")) {
             new HelpFormatter().printHelp(MethodHandles.lookup().lookupClass().getName(), options);
         } else {
-            new StreamPopulator(
+            StreamPopulator populator = new StreamPopulator(
                     line.getOptionValue("region", "eu-west-1"),
                     line.getOptionValue("bucket", "aws-bigdata-blog"),
                     line.getOptionValue("prefix", "artifacts/flink-refarch/data/"),
                     line.getOptionValue("stream", "taxi-trip-events"),
                     line.hasOption("aggregate"),
                     Float.valueOf(line.getOptionValue("speedup", "1440"))
-            ).populate();
+            );
+
+            if (line.hasOption("seek")) {
+                populator.seek(new DateTime(line.getOptionValue("seek")).getMillis());
+            }
+
+            populator.populate();
         }
+    }
+
+
+    private void seek(long timestamp) {
+        taxiEventReader.seek(timestamp);
     }
 
 
