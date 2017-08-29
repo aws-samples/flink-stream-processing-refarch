@@ -17,6 +17,7 @@
 package com.amazonaws.flink.refarch;
 
 import com.amazonaws.flink.refarch.events.TripEvent;
+import com.amazonaws.flink.refarch.utils.BackpressureSemaphore;
 import com.amazonaws.flink.refarch.utils.TaxiEventReader;
 import com.amazonaws.flink.refarch.utils.WatermarkTracker;
 import com.amazonaws.services.kinesis.producer.KinesisProducer;
@@ -47,12 +48,16 @@ public class StreamPopulator
     /** print statistics every STAT_INTERVAL_MILLIS ms */
     private static final long STAT_INTERVAL_MILLIS = 20_000;
 
+    /** block if number of locally buffered events exceedes MAX_OUTSTANDING_RECORD_COUNT */
+    public final int MAX_OUTSTANDING_RECORD_COUNT = 50_000;
+
 
     private final String streamName;
     private final float speedupFactor;
     private final KinesisProducer kinesisProducer;
     private final TaxiEventReader taxiEventReader;
     private final WatermarkTracker watermarkTracker;
+    private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
 
 
     public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor) {
@@ -60,7 +65,6 @@ public class StreamPopulator
                 .setRegion(region)
                 .setCredentialsRefreshDelay(500)
                 .setRecordTtl(300_000)
-                .setRateLimit(100)
                 .setAggregationEnabled(aggregate);
 
         AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(region).build();      //FIXME
@@ -70,6 +74,7 @@ public class StreamPopulator
         this.kinesisProducer = new KinesisProducer(producerConfiguration);
         this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
         this.watermarkTracker = new WatermarkTracker(region, streamName);
+        this.backpressureSemaphore = new BackpressureSemaphore<>(MAX_OUTSTANDING_RECORD_COUNT);
     }
 
 
@@ -146,6 +151,9 @@ public class StreamPopulator
 
                 //monitor if the event has actually been sent and adapt the largest possible watermark value accordingly
                 watermarkTracker.trackTimestamp(f, nextEvent);
+
+                //block if too many events are buffered locally
+                backpressureSemaphore.accuire(f);
 
                 watermarkBatchEventCount++;
                 statisticsBatchEventCount++;
