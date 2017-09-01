@@ -46,32 +46,31 @@ public class StreamPopulator {
   /** Sleep for at lease MIN_SLEEP_MILLIS if no events need to be sent to Kinesis. */
   private static final long MIN_SLEEP_MILLIS = 5;
 
-  /** Print statistics every STAT_INTERVAL_MILLIS ms. */
-  private static final long STAT_INTERVAL_MILLIS = 20_000;
-
   /** Block process if number of locally buffered events exceeds MAX_OUTSTANDING_RECORD_COUNT. */
   private static final int MAX_OUTSTANDING_RECORD_COUNT = 50_000;
 
 
   private final String streamName;
   private final float speedupFactor;
+  private final long statisticsFrequencyMillies;
   private final KinesisProducer kinesisProducer;
   private final TaxiEventReader taxiEventReader;
   private final WatermarkTracker watermarkTracker;
   private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
 
 
-  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor) {
+  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies) {
     KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
         .setRegion(region)
         .setCredentialsRefreshDelay(500)
         .setRecordTtl(300_000)
         .setAggregationEnabled(aggregate);
 
-    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(region).build();      //FIXME
+    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(region).build();      //FIXME: set back to us-east-1
 
     this.streamName = streamName;
     this.speedupFactor = speedupFactor;
+    this.statisticsFrequencyMillies = statisticsFrequencyMillies;
     this.kinesisProducer = new KinesisProducer(producerConfiguration);
     this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
     this.watermarkTracker = new WatermarkTracker(region, streamName);
@@ -88,6 +87,7 @@ public class StreamPopulator {
         .addOption("speedup", true, "the speedup factor for replaying events into the kinesis stream")
         .addOption("aggregate", "turn on aggregation of multiple events into a kinesis record")
         .addOption("seek", true, "start replaying events at given timestamp")
+        .addOption("statisticsFrequency", true, "print statistics every statisticFrequency ms")
         .addOption("help", "print this help message");
 
     CommandLine line = new DefaultParser().parse(options, args);
@@ -101,7 +101,8 @@ public class StreamPopulator {
           line.getOptionValue("prefix", "data/nyc-tlc-trips.snz/"),
           line.getOptionValue("stream", "taxi-trip-events"),
           line.hasOption("aggregate"),
-          Float.valueOf(line.getOptionValue("speedup", "1440"))
+          Float.valueOf(line.getOptionValue("speedup", "10080")),
+          Long.valueOf(line.getOptionValue("statisticsFrequency", "60000"))
       );
 
       if (line.hasOption("seek")) {
@@ -135,12 +136,16 @@ public class StreamPopulator {
     LOG.info("starting to populate stream {}", streamName);
 
     while (true) {
+      //determine system time, ie, how much time hast past since program invocation...
       double timeDeltaSystem = (System.currentTimeMillis() - timeZeroSystem) * speedupFactor;
+
+      //determine event time, ie, how much time has passed according to the events that have been ingested to the Kinesis stream
       long timeDeltaLog = nextEvent.timestamp - timeZeroLog;
+
       double replayTimeGap = timeDeltaSystem - timeDeltaLog;
 
       if (replayTimeGap < 0) {
-        // wait until replay time has caught up with the time in the
+        //wait until event time has caught up with the system time
         try {
           long sleepTime = (long) Math.max(-replayTimeGap / speedupFactor, MIN_SLEEP_MILLIS);
 
@@ -181,16 +186,16 @@ public class StreamPopulator {
         lastWatermarkSentTime = System.currentTimeMillis();
       }
 
-      //output statistics every STAT_INTERVAL_MILLIS ms
-      if ((System.currentTimeMillis() - timeZeroSystem) / STAT_INTERVAL_MILLIS != statisticsLastOutputTimeslot) {
-        double statisticsBatchEventRate = Math.round(1000.0 * statisticsBatchEventCount / STAT_INTERVAL_MILLIS);
+      //output statistics every statisticsFrequencyMillies ms
+      if ((System.currentTimeMillis() - timeZeroSystem) / statisticsFrequencyMillies != statisticsLastOutputTimeslot) {
+        double statisticsBatchEventRate = Math.round(1000.0 * statisticsBatchEventCount / statisticsFrequencyMillies);
         long replayLag = Math.round(replayTimeGap / speedupFactor / 1000);
 
         LOG.info("all events with dropoff time before {} have been sent ({} events/sec, {} sec replay lag)",
             new DateTime(lastWatermark + 1), statisticsBatchEventRate, replayLag);
 
         statisticsBatchEventCount = 0;
-        statisticsLastOutputTimeslot = (System.currentTimeMillis() - timeZeroSystem) / STAT_INTERVAL_MILLIS;
+        statisticsLastOutputTimeslot = (System.currentTimeMillis() - timeZeroSystem) / statisticsFrequencyMillies;
       }
     }
 

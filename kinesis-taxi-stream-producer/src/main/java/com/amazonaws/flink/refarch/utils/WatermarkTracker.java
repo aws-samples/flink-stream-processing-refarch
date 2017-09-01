@@ -58,7 +58,7 @@ public class WatermarkTracker {
 
 
   public long sentWatermark(TripEvent nextEvent) {
-    //determine the larges possible wartermark value
+    //determine the larges possible watermark value
     refreshWatermark(nextEvent);
 
     //asynchronously ingest the watermark to every shard of the Kinesis stream
@@ -89,7 +89,6 @@ public class WatermarkTracker {
 
       LOG.debug("send watermark {}", new DateTime(currentWatermark));
     } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
-
       //if any request is throttled, just wait for the next iteration to submit another watermark
       LOG.warn("skipping watermark due to limit exceeded exception");
     }
@@ -128,12 +127,16 @@ public class WatermarkTracker {
   }
 
 
+  /** Track the timestamp of the event for determining watermark values until it has been sent or dropped. */
   public void trackTimestamp(ListenableFuture<UserRecordResult> f, TripEvent event) {
-    //add event (and it's timestamp) to a priority queue and remove it when it has eventually been sent to the Kinesis stream
     Futures.addCallback(f, new RemoveTimestampCallback(event));
   }
 
 
+  /**
+   * Helper class that adds and event (and it's timestamp) to a priority queue
+   * and remove it when it has eventually been sent to the Kinesis stream or was dropped by the KCL.
+   */
   class RemoveTimestampCallback implements FutureCallback<UserRecordResult> {
     private final TripEvent event;
 

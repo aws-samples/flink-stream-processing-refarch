@@ -19,26 +19,26 @@ import org.joda.time.DateTime;
 
 
 public class TripEvent extends Event {
-  public final double pickup_lat;
-  public final double pickup_lon;
-  public final double dropoff_lat;
-  public final double dropoff_lon;
-  public final double total_amount;
-  public final DateTime pickup_datetime;
-  public final DateTime dropoff_datetime;
+  public final double pickupLat;
+  public final double pickupLon;
+  public final double dropoffLat;
+  public final double dropoffLon;
+  public final double totalAmount;
+  public final DateTime pickupDatetime;
+  public final DateTime dropoffDatetime;
 
   public TripEvent() {
-    pickup_lat = 0;
-    pickup_lon = 0;
-    dropoff_lat = 0;
-    dropoff_lon = 0;
-    total_amount = 0;
-    pickup_datetime = DateTime.now();
-    dropoff_datetime = DateTime.now();
+    pickupLat = 0;
+    pickupLon = 0;
+    dropoffLat = 0;
+    dropoffLon = 0;
+    totalAmount = 0;
+    pickupDatetime = DateTime.now();
+    dropoffDatetime = DateTime.now();
   }
 
   @Override
   public long getTimestamp() {
-    return dropoff_datetime.getMillis();
+    return dropoffDatetime.getMillis();
   }
 }

@@ -52,30 +52,32 @@ import org.slf4j.LoggerFactory;
 
 public class ProcessTaxiStream {
   private static final String DEFAULT_REGION = "eu-west-1";
-  private static final String DEFAULT_STREAM_NAME = "taxi-trip-events";
-  private static final String ES_DEFAULT_INDEX = "taxi-dashboard";
 
   private static final int MIN_PICKUP_COUNT = 2;
   private static final int GEOHASH_PRECISION = 6;
+  private static final String ES_DEFAULT_INDEX = "taxi-dashboard";
 
   private static final Logger LOG = LoggerFactory.getLogger(ProcessTaxiStream.class);
+
 
   public static void main(String[] args) throws Exception {
     ParameterTool pt = ParameterTool.fromArgs(args);
 
     StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+
+    if (! pt.has("noeventtime")) {
+      env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+    }
 
     Properties kinesisConsumerConfig = new Properties();
     kinesisConsumerConfig.setProperty(AWSConfigConstants.AWS_REGION, pt.get("region", DEFAULT_REGION));
     kinesisConsumerConfig.setProperty(AWSConfigConstants.AWS_CREDENTIALS_PROVIDER, "AUTO");
     kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_MAX, "10000");
-    kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_BACKOFF_BASE, "500");
     kinesisConsumerConfig.setProperty(ConsumerConfigConstants.SHARD_GETRECORDS_INTERVAL_MILLIS, "2000");
 
 
     DataStream<Event> kinesisStream = env.addSource(new FlinkKinesisConsumer<>(
-        pt.get("stream", DEFAULT_STREAM_NAME),
+        pt.getRequired("stream"),
         new EventSchema(),
         kinesisConsumerConfig)
     );
@@ -91,7 +93,7 @@ public class ProcessTaxiStream {
 
 
     DataStream<PickupCount> pickupCounts = trips
-        .map(trip -> new Tuple1<>(GeoHash.geoHashStringWithCharacterPrecision(trip.pickup_lat, trip.pickup_lon, GEOHASH_PRECISION)))
+        .map(trip -> new Tuple1<>(GeoHash.geoHashStringWithCharacterPrecision(trip.pickupLat, trip.pickupLon, GEOHASH_PRECISION)))
         .keyBy(0)
         .timeWindow(Time.minutes(10))
         .apply((Tuple tuple, TimeWindow window, Iterable<Tuple1<String>> input, Collector<PickupCount> out) -> {
@@ -100,17 +102,17 @@ public class ProcessTaxiStream {
 
           out.collect(new PickupCount(position, count, window.maxTimestamp()));
         })
-        .filter(geo -> geo.pickup_count >= MIN_PICKUP_COUNT);
+        .filter(geo -> geo.pickupCount >= MIN_PICKUP_COUNT);
 
 
     DataStream<TripDuration> tripDurations = trips
         .flatMap((TripEvent trip, Collector<Tuple3<String, String, Long>> out) -> {
-          String pickupLocation = GeoHash.geoHashStringWithCharacterPrecision(trip.pickup_lat, trip.pickup_lon, GEOHASH_PRECISION);
-          long tripDuration = new Duration(trip.pickup_datetime, trip.dropoff_datetime).getStandardMinutes();
+          String pickupLocation = GeoHash.geoHashStringWithCharacterPrecision(trip.pickupLat, trip.pickupLon, GEOHASH_PRECISION);
+          long tripDuration = new Duration(trip.pickupDatetime, trip.dropoffDatetime).getStandardMinutes();
 
-          if (GeoUtils.nearJFK(trip.dropoff_lat, trip.dropoff_lon)) {
+          if (GeoUtils.nearJFK(trip.dropoffLat, trip.dropoffLon)) {
             out.collect(new Tuple3<>(pickupLocation, "JFK", tripDuration));
-          } else if (GeoUtils.nearLGA(trip.dropoff_lat, trip.dropoff_lon)) {
+          } else if (GeoUtils.nearLGA(trip.dropoffLat, trip.dropoffLon)) {
             out.collect(new Tuple3<>(pickupLocation, "LGA", tripDuration));
           }
         })
@@ -134,17 +136,16 @@ public class ProcessTaxiStream {
 
 
     if (pt.has("checkpoint")) {
-      env.enableCheckpointing(20_000);
+      env.enableCheckpointing(5_000);
 
-      if (pt.get("checkpoint") == null || !"".equals(pt.get("checkpoint"))) {
-        CheckpointConfig checkpointConfig = env.getCheckpointConfig();
-        checkpointConfig.enableExternalizedCheckpoints(ExternalizedCheckpointCleanup.DELETE_ON_CANCELLATION);
+      CheckpointConfig checkpointConfig = env.getCheckpointConfig();
+      checkpointConfig.enableExternalizedCheckpoints(ExternalizedCheckpointCleanup.DELETE_ON_CANCELLATION);
 
-        env.setStateBackend(new RocksDBStateBackend(new URI(pt.get("checkpoint"))));
+      env.setStateBackend(new RocksDBStateBackend(new URI(pt.getRequired("checkpoint"))));
 
-        LOG.info("writing checkpoints to {}", pt.get("checkpoint"));
-      }
+      LOG.info("writing checkpoints to {}", pt.get("checkpoint"));
     }
+
 
     if (pt.has("es-endpoint")) {
       final String indexName = pt.get("es-index", ES_DEFAULT_INDEX);
@@ -154,11 +155,12 @@ public class ProcessTaxiStream {
           .put("region", pt.get("region", DEFAULT_REGION))
           .build();
 
-      pickupCounts.addSink(new ElasticsearchJestSink<>(config, indexName, "pickup_count"));
+      pickupCounts.addSink(new ElasticsearchJestSink<>(config, indexName, "pickupCount"));
       tripDurations.addSink(new ElasticsearchJestSink<>(config, indexName, "trip_duration"));
     }
 
-    LOG.info("Starting to consume events from stream {}", pt.get("stream", DEFAULT_STREAM_NAME));
+
+    LOG.info("Starting to consume events from stream {}", pt.getRequired("stream"));
 
     env.execute();
   }

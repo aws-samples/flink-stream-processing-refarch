@@ -33,8 +33,8 @@ public class GeoUtils {
       .build();
 
   public static boolean nearNYC(TripEvent trip) {
-    return GeoUtils.nearNYC(trip.pickup_lat, trip.pickup_lon)
-        && GeoUtils.nearNYC(trip.dropoff_lat, trip.dropoff_lon);
+    return GeoUtils.nearNYC(trip.pickupLat, trip.pickupLon)
+        && GeoUtils.nearNYC(trip.dropoffLat, trip.dropoffLon);
   }
 
   public static boolean nearNYC(double latitude, double longitude) {
@@ -50,7 +50,7 @@ public class GeoUtils {
   }
 
   public static boolean hasValidCoordinates(TripEvent trip) {
-    return Math.abs(trip.pickup_lat) <= 90 && Math.abs(trip.pickup_lon) <= 180
-        && Math.abs(trip.dropoff_lat) <= 90 && Math.abs(trip.dropoff_lon) <= 180;
+    return Math.abs(trip.pickupLat) <= 90 && Math.abs(trip.pickupLon) <= 180
+           && Math.abs(trip.dropoffLat) <= 90 && Math.abs(trip.dropoffLon) <= 180;
   }
 }

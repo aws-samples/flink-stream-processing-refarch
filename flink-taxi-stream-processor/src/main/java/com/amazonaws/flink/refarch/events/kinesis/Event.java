@@ -15,6 +15,7 @@
 
 package com.amazonaws.flink.refarch.events.kinesis;
 
+import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonDeserializer;
@@ -30,10 +31,12 @@ public abstract class Event {
   private static final String TYPE_FIELD = "type";
 
   private static final Gson gson = new GsonBuilder()
+      .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
       .registerTypeAdapter(DateTime.class, (JsonDeserializer<DateTime>) (json, typeOfT, context) -> new DateTime(json.getAsString()))
       .create();
 
   public static Event parseEvent(byte[] event) {
+    //parse the event payload and remove the type attribute
     JsonReader jsonReader =  new JsonReader(new InputStreamReader(new ByteArrayInputStream(event)));
     JsonElement jsonElement = Streams.parse(jsonReader);
     JsonElement labelJsonElement = jsonElement.getAsJsonObject().remove(TYPE_FIELD);
@@ -42,6 +45,7 @@ public abstract class Event {
       throw new IllegalArgumentException("Event does not define a type field: " + new String(event));
     }
 
+    //convert json to POJO, based on the type attribute
     switch (labelJsonElement.getAsString()) {
       case "watermark":
         return gson.fromJson(jsonElement, WatermarkEvent.class);

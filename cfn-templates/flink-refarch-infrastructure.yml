@@ -279,9 +279,17 @@ Resources:
         - Classification: flink-conf
           ConfigurationProperties:
             state.checkpoints.dir: !Sub s3://${FlinkCheckpointBucket}/checkpoint-metadata
-#        - Classification: yarn-site
-#          ConfigurationProperties:
-#            yarn.nodemanager.resource.cpu-vcores: 8
+            high-availability: zookeeper
+            high-availability.zookeeper.quorum: localhost:2181
+#            high-availability.zookeeper.quorum: !Sub ${FlinkCluster.MasterPublicDNS}:2181
+#            high-availability.zookeeper.storageDir: !Sub s3://${FlinkCheckpointBucket}/flink/recovery
+            high-availability.zookeeper.storageDir: hdfs:///flink/recovery
+#            high-availability.zookeeper.path.root: /flink
+#            yarn.application-attempts: 10
+            akka.ask.timeout: 20
+        - Classification: hdfs-site
+          ConfigurationProperties:
+            dfs.replication: 3
 
 
   FlinkCheckpointBucket:
@@ -359,8 +367,8 @@ Resources:
                         "view": "timeSeries",
                         "stacked": false,
                         "metrics": [
-                            [ "AWS/Kinesis", "ReadProvisionedThroughputExceeded", "StreamName", "${KinesisStream}", { "period": 60 } ],
-                            [ ".", "WriteProvisionedThroughputExceeded", ".", ".", { "period": 60 } ]
+                            [ "AWS/Kinesis", "IncomingRecords", "StreamName", "${KinesisStream}", { "period": 60, "stat": "Sum" } ],
+                            [ ".", "WriteProvisionedThroughputExceeded", ".", ".", { "period": 60, "yAxis": "right" } ]
                         ],
                         "region": "${AWS::Region}",
                         "period": 60
@@ -376,7 +384,7 @@ Resources:
                         "view": "timeSeries",
                         "stacked": false,
                         "metrics": [
-                            [ "AWS/Kinesis", "IncomingRecords", "StreamName", "${KinesisStream}", { "period": 60, "stat":"Sum" } ],
+                            [ "AWS/Kinesis", "GetRecords.Records", "StreamName", "${KinesisStream}", { "period": 60, "stat":"Sum" } ],
                             [ ".", "GetRecords.IteratorAgeMilliseconds", ".", ".", { "period": 60, "yAxis":"right" } ],
                             [ "...", { "period": 60, "stat": "p99", "yAxis": "right" } ]
                         ],

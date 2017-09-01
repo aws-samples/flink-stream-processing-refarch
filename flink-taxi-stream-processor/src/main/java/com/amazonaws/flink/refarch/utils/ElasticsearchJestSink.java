@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
@@ -38,9 +41,9 @@ import vc.inreach.aws.request.AWSSigner;
 import vc.inreach.aws.request.AWSSigningRequestInterceptor;
 
 
-public class ElasticsearchJestSink<T> extends RichSinkFunction<T> {
-  private JestClient client;
-  private List<Index> batch;
+public class ElasticsearchJestSink<T> extends RichSinkFunction<T> implements CheckpointedFunction {
+  private JestClient jestClient;
+  private List<Index> documentBuffer;
 
   private final String indexName;
   private final String documentType;
@@ -53,9 +56,11 @@ public class ElasticsearchJestSink<T> extends RichSinkFunction<T> {
 
   private static final String ES_SERVICE_NAME = "es";
 
+
   public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType) {
     this(config, indexName, documentType, 500, 5000);
   }
+
 
   public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType, int batchSize, long maxBufferTime) {
     this.userConfig = config;
@@ -67,25 +72,34 @@ public class ElasticsearchJestSink<T> extends RichSinkFunction<T> {
     this.lastBufferFlush = System.currentTimeMillis();
   }
 
+
   @Override
   public void invoke(T document)  {
-    batch.add(new Index.Builder(document).index(indexName).type(documentType).build());
+    documentBuffer.add(new Index.Builder(document).index(indexName).type(documentType).build());
 
-    if (batch.size() >= batchSize || System.currentTimeMillis() - lastBufferFlush >= maxBufferTime) {
-      Bulk.Builder bulkIndexBuilder = new Bulk.Builder();
-
-      batch.forEach(bulkIndexBuilder::addAction);
-
+    if (documentBuffer.size() >= batchSize || System.currentTimeMillis() - lastBufferFlush >= maxBufferTime) {
       try {
-        client.execute(bulkIndexBuilder.build());
+        flushDocumentBuffer();
       } catch (IOException e) {
-        return;
+        //if the request fails, that's fine, just retry on the next invocation
       }
-
-      batch.clear();
-      lastBufferFlush = System.currentTimeMillis();
     }
   }
+
+
+  private void flushDocumentBuffer() throws IOException {
+    Bulk.Builder bulkIndexBuilder = new Bulk.Builder();
+
+    //add all documents in the buffer to a bulk index action
+    documentBuffer.forEach(bulkIndexBuilder::addAction);
+
+    //send the bulk index to Elasticsearch
+    jestClient.execute(bulkIndexBuilder.build());   //FIXME: iterate through response and handle failures of single actions to obtain at least once semantics
+
+    documentBuffer.clear();
+    lastBufferFlush = System.currentTimeMillis();
+  }
+
 
   @Override
   public void open(Configuration configuration) {
@@ -116,7 +130,25 @@ public class ElasticsearchJestSink<T> extends RichSinkFunction<T> {
         .multiThreaded(true)
         .build());
 
-    client = factory.getObject();
-    batch = new ArrayList<>(batchSize);
+    jestClient = factory.getObject();
+    documentBuffer = new ArrayList<>(batchSize);
+  }
+
+
+  @Override
+  public void snapshotState(FunctionSnapshotContext functionSnapshotContext) throws Exception {
+    do {
+      try {
+        flushDocumentBuffer();
+      } catch (IOException e) {
+        //if the request fails, that's fine, just retry on the next iteration
+      }
+    } while (! documentBuffer.isEmpty());
+  }
+
+
+  @Override
+  public void initializeState(FunctionInitializationContext functionInitializationContext) throws Exception {
+    //nothing to initialize, as in flight documents are completely flushed during checkpointing
   }
 }

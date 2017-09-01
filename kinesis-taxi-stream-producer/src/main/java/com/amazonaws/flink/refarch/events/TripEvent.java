@@ -34,6 +34,7 @@ public class TripEvent extends Event implements Comparable<TripEvent> {
 
   @Override
   public int compareTo(TripEvent that) {
-    return Long.compare(this.tripId, that.tripId);             //ids are ordered by dropoff time
+    //ids are ordered by dropofTtime, so this effectively orders TripEvents by dropoffTime
+    return Long.compare(this.tripId, that.tripId);
   }
 }
