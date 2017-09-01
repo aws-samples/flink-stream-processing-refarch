@@ -43,6 +43,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
   private TripEvent next;
   private boolean hasNext = true;
 
+
   public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix) {
     this.s3 = s3;
     this.s3Objects = S3Objects.withPrefix(s3, bucketName, prefix).iterator();
@@ -50,16 +51,33 @@ public class TaxiEventReader implements Iterator<TripEvent> {
     next();
   }
 
+
   public void seek(long timestamp) {
+    seek(timestamp, 10_000);
+  }
+
+
+  public void seek(long timestamp, int skipNumLines) {
     while (next.timestamp < timestamp && hasNext) {
+      //skip skipNumLines before parsing next event
+      try {
+        for (int i = 0; i < skipNumLines; i++) {
+          objectStream.readLine();
+        }
+      } catch (IOException | NullPointerException e) {
+        // if the next line cannot be read, that's fine, the next S3 object will be tried next
+      }
+
       next();
     }
   }
+
 
   @Override
   public boolean hasNext() {
     return hasNext;
   }
+
 
   @Override
   public TripEvent next() {
@@ -67,7 +85,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
 
     try {
       nextLine = objectStream.readLine();
-    } catch (IOException | NullPointerException e ) {
+    } catch (IOException | NullPointerException e) {
       // if the next line cannot be read, that's fine, the next S3 object will be tried next
     }
 
