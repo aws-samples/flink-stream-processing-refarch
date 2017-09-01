@@ -23,19 +23,19 @@ import org.apache.flink.streaming.util.serialization.DeserializationSchema;
 
 public class EventSchema implements DeserializationSchema<Event> {
 
-    @Override
-    public Event deserialize(byte[] bytes) {
-        return Event.parseEvent(bytes);
-    }
+  @Override
+  public Event deserialize(byte[] bytes) {
+    return Event.parseEvent(bytes);
+  }
 
-    @Override
-    public boolean isEndOfStream(Event event) {
-        return false;
-    }
+  @Override
+  public boolean isEndOfStream(Event event) {
+    return false;
+  }
 
-    @Override
-    public TypeInformation<Event> getProducedType() {
-        return TypeExtractor.getForClass(Event.class);
-    }
+  @Override
+  public TypeInformation<Event> getProducedType() {
+    return TypeExtractor.getForClass(Event.class);
+  }
 
 }

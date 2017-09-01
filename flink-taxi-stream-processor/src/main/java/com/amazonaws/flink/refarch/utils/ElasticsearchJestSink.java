@@ -23,6 +23,12 @@ import io.searchbox.client.JestClientFactory;
 import io.searchbox.client.config.HttpClientConfig;
 import io.searchbox.core.Bulk;
 import io.searchbox.core.Index;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
@@ -31,92 +37,86 @@ import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
 import vc.inreach.aws.request.AWSSigner;
 import vc.inreach.aws.request.AWSSigningRequestInterceptor;
 
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 
 public class ElasticsearchJestSink<T> extends RichSinkFunction<T> {
-    private JestClient client;
-    private List<Index> batch;
+  private JestClient client;
+  private List<Index> batch;
 
-    private final String indexName;
-    private final String documentType;
-    private final int batchSize;
-    private final long maxBufferTime;
-    private final Map<String, String> userConfig;
+  private final String indexName;
+  private final String documentType;
 
-    private long lastBufferFlush;
+  private final int batchSize;
+  private final long maxBufferTime;
+  private final Map<String, String> userConfig;
 
-    private static final String ES_SERVICE_NAME = "es";
+  private long lastBufferFlush;
 
-    public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType) {
-        this(config, indexName, documentType, 500, 5000);
+  private static final String ES_SERVICE_NAME = "es";
+
+  public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType) {
+    this(config, indexName, documentType, 500, 5000);
+  }
+
+  public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType, int batchSize, long maxBufferTime) {
+    this.userConfig = config;
+    this.indexName = indexName;
+    this.documentType = documentType;
+    this.batchSize = batchSize;
+    this.maxBufferTime = maxBufferTime;
+
+    this.lastBufferFlush = System.currentTimeMillis();
+  }
+
+  @Override
+  public void invoke(T document)  {
+    batch.add(new Index.Builder(document).index(indexName).type(documentType).build());
+
+    if (batch.size() >= batchSize || System.currentTimeMillis() - lastBufferFlush >= maxBufferTime) {
+      Bulk.Builder bulkIndexBuilder = new Bulk.Builder();
+
+      batch.forEach(bulkIndexBuilder::addAction);
+
+      try {
+        client.execute(bulkIndexBuilder.build());
+      } catch (IOException e) {
+        return;
+      }
+
+      batch.clear();
+      lastBufferFlush = System.currentTimeMillis();
     }
+  }
 
-    public ElasticsearchJestSink(Map<String, String> config, String indexName, String documentType, int batchSize, long maxBufferTime) {
-        this.userConfig = config;
-        this.indexName = indexName;
-        this.documentType = documentType;
-        this.batchSize = batchSize;
-        this.maxBufferTime = maxBufferTime;
+  @Override
+  public void open(Configuration configuration) {
+    ParameterTool params = ParameterTool.fromMap(userConfig);
 
-        this.lastBufferFlush = System.currentTimeMillis();
-    }
+    final Supplier<LocalDateTime> clock = () -> LocalDateTime.now(ZoneOffset.UTC);
+    final AWSCredentialsProvider credentialsProvider = new DefaultAWSCredentialsProviderChain();
+    final AWSSigner awsSigner = new AWSSigner(credentialsProvider, params.getRequired("region"), ES_SERVICE_NAME, clock);
 
-    @Override
-    public void invoke(T document)  {
-        batch.add(new Index.Builder(document).index(indexName).type(documentType).build());
+    final AWSSigningRequestInterceptor requestInterceptor = new AWSSigningRequestInterceptor(awsSigner);
 
-        if (batch.size() >= batchSize || System.currentTimeMillis()-lastBufferFlush >= maxBufferTime) {
-            Bulk.Builder bulkIndexBuilder = new Bulk.Builder();
+    final JestClientFactory factory = new JestClientFactory() {
+      @Override
+      protected HttpClientBuilder configureHttpClient(HttpClientBuilder builder) {
+        builder.addInterceptorLast(requestInterceptor);
+        return builder;
+      }
 
-            batch.forEach(bulkIndexBuilder::addAction);
+      @Override
+      protected HttpAsyncClientBuilder configureHttpClient(HttpAsyncClientBuilder builder) {
+        builder.addInterceptorLast(requestInterceptor);
+        return builder;
+      }
+    };
 
-            try {
-                client.execute(bulkIndexBuilder.build());
-            } catch (IOException e) {
-                return;
-            }
+    factory.setHttpClientConfig(new HttpClientConfig
+        .Builder(params.getRequired("es-endpoint"))
+        .multiThreaded(true)
+        .build());
 
-            batch.clear();
-            lastBufferFlush = System.currentTimeMillis();
-        }
-    }
-
-    @Override
-    public void open(Configuration configuration) {
-        ParameterTool params = ParameterTool.fromMap(userConfig);
-
-        final Supplier<LocalDateTime> clock = () -> LocalDateTime.now(ZoneOffset.UTC);
-        final AWSCredentialsProvider credentialsProvider = new DefaultAWSCredentialsProviderChain();
-        final AWSSigner awsSigner = new AWSSigner(credentialsProvider, params.getRequired("region"), ES_SERVICE_NAME, clock);
-
-        final AWSSigningRequestInterceptor requestInterceptor = new AWSSigningRequestInterceptor(awsSigner);
-
-        final JestClientFactory factory = new JestClientFactory() {
-            @Override
-            protected HttpClientBuilder configureHttpClient(HttpClientBuilder builder) {
-                builder.addInterceptorLast(requestInterceptor);
-                return builder;
-            }
-
-            @Override
-            protected HttpAsyncClientBuilder configureHttpClient(HttpAsyncClientBuilder builder) {
-                builder.addInterceptorLast(requestInterceptor);
-                return builder;
-            }
-        };
-
-        factory.setHttpClientConfig(new HttpClientConfig
-                .Builder(params.getRequired("es-endpoint"))
-                .multiThreaded(true)
-                .build());
-
-        client = factory.getObject();
-        batch = new ArrayList<>(batchSize);
-    }
+    client = factory.getObject();
+    batch = new ArrayList<>(batchSize);
+  }
 }

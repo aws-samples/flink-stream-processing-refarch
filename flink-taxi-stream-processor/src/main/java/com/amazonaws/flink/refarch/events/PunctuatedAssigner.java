@@ -25,15 +25,15 @@ import org.slf4j.LoggerFactory;
 
 public class PunctuatedAssigner implements AssignerWithPunctuatedWatermarks<Event> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PunctuatedAssigner.class);
+  private static final Logger LOG = LoggerFactory.getLogger(PunctuatedAssigner.class);
 
-    @Override
-    public long extractTimestamp(Event element, long previousElementTimestamp) {
-        return element.getTimestamp();
-    }
+  @Override
+  public long extractTimestamp(Event element, long previousElementTimestamp) {
+    return element.getTimestamp();
+  }
 
-    @Override
-    public Watermark checkAndGetNextWatermark(Event lastElement, long extractedTimestamp) {
-        return lastElement instanceof WatermarkEvent ? new Watermark(extractedTimestamp) : null;
-    }
+  @Override
+  public Watermark checkAndGetNextWatermark(Event lastElement, long extractedTimestamp) {
+    return lastElement instanceof WatermarkEvent ? new Watermark(extractedTimestamp) : null;
+  }
 }

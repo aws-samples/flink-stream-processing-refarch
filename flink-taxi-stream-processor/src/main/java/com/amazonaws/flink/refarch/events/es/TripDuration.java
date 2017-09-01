@@ -17,17 +17,17 @@ package com.amazonaws.flink.refarch.events.es;
 
 
 public class TripDuration extends Document {
-    public final String location;
-    public final String airport_code;
-    public final long sum_trip_duration;
-    public final double avg_trip_duration;
+  public final String location;
+  public final String airport_code;
+  public final long sum_trip_duration;
+  public final double avg_trip_duration;
 
-    public TripDuration(String location, String airport_code, long sum_trip_duration, double avg_trip_duration, long timestamp) {
-        super(timestamp);
+  public TripDuration(String location, String airport_code, long sum_trip_duration, double avg_trip_duration, long timestamp) {
+    super(timestamp);
 
-        this.location = location;
-        this.airport_code = airport_code;
-        this.avg_trip_duration = avg_trip_duration;
-        this.sum_trip_duration = sum_trip_duration;
-    }
+    this.location = location;
+    this.airport_code = airport_code;
+    this.avg_trip_duration = avg_trip_duration;
+    this.sum_trip_duration = sum_trip_duration;
+  }
 }

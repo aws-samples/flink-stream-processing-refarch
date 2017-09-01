@@ -17,13 +17,13 @@ package com.amazonaws.flink.refarch.events.es;
 
 
 public class PickupCount extends Document {
-    public final String location;
-    public final long pickup_count;
+  public final String location;
+  public final long pickup_count;
 
-    public PickupCount(String location, long pickup_count, long timestamp) {
-        super(timestamp);
+  public PickupCount(String location, long pickup_count, long timestamp) {
+    super(timestamp);
 
-        this.pickup_count = pickup_count;
-        this.location = location;
-    }
+    this.pickup_count = pickup_count;
+    this.location = location;
+  }
 }

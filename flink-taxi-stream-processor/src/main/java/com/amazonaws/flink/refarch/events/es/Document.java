@@ -19,16 +19,16 @@ import com.google.gson.Gson;
 
 
 public abstract class Document {
-    private static final Gson gson = new Gson();
+  private static final Gson gson = new Gson();
 
-    public final long timestamp;
+  public final long timestamp;
 
-    public Document(long timestamp) {
-        this.timestamp = timestamp;
-    }
+  public Document(long timestamp) {
+    this.timestamp = timestamp;
+  }
 
-    @Override
-    public String toString() {
-        return gson.toJson(this);
-    }
+  @Override
+  public String toString() {
+    return gson.toJson(this);
+  }
 }
