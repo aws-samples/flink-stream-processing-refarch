@@ -20,7 +20,7 @@ Parameters:
 Outputs:
   ProducerInstance:
     Description: SSH connection to the instance that ingests trip events into the Kinesis stream
-    Value: !Sub ssh -C ${ProducerInstance.PublicDnsName}
+    Value: !Sub ssh -C ec2-user@${ProducerInstance.PublicDnsName}
 
   KibanaDashboardURL:
     Description: URL to access the Kibana dasboards
@@ -30,21 +30,17 @@ Outputs:
     Description: EMR master node SSH connection
     Value: !Sub ssh -C -D 8157 hadoop@${FlinkCluster.MasterPublicDNS}
 
-  EmrSetup:
-    Description: Install Flink 1.3.2
-    Value: curl http://archive.apache.org/dist/flink/flink-1.3.2/flink-1.3.2-bin-hadoop27-scala_2.10.tgz | tar xz
-
   StartFlinkDemon:
     Description: Start Flink Demon
-    Value: HADOOP_CONF_DIR=/etc/hadoop/conf ~/flink-1.?.?/bin/yarn-session.sh -n 5 -s 4 -tm 4096 -d
+    Value: flink-yarn-session -n 3 -s 4 -tm 4608 -d
 
   FlinkCommand:
     Description: Command to invoke Flink job on the EMR cluster
-    Value: !Sub ~/flink-1.?.?/bin/flink run -p 20 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint
+    Value: !Sub flink run -p 8 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkCheckpointBucket}/checkpoint-data-`date +%s`
 
   ProducerCommand:
     Description: Command to populate Kinesis stream with taxi trip events
-    Value: !Sub java -jar kinesis-taxi-stream-producer-1.1-SNAPSHOT.jar -speedup 2880 -stream ${KinesisStream} -region ${AWS::Region}
+    Value: !Sub java -jar kinesis-taxi-stream-producer-1.1-SNAPSHOT.jar -stream ${KinesisStream} -region ${AWS::Region} -speedup 10080
 
 Resources:
   AttachGateway:
@@ -207,7 +203,7 @@ Resources:
   KinesisStream:
     Type: AWS::Kinesis::Stream
     Properties:
-      ShardCount: 16
+      ShardCount: 32
 
   ElasticSearch:
     Type: AWS::Elasticsearch::Domain
@@ -241,8 +237,8 @@ Resources:
             ]
           }
       ElasticsearchClusterConfig:
-        InstanceCount: 1
-        InstanceType: m3.medium.elasticsearch
+        InstanceCount: 2
+        InstanceType: m4.large.elasticsearch
       EBSOptions:
         EBSEnabled: true
         VolumeType: gp2
@@ -267,7 +263,7 @@ Resources:
           Market: ON_DEMAND
           Name: Master
         CoreInstanceGroup:
-          InstanceCount: 5
+          InstanceCount: 3
           InstanceType: c4.xlarge
           Market: ON_DEMAND
           Name: Core
@@ -279,6 +275,17 @@ Resources:
       ServiceRole : EMR_DefaultRole
       ReleaseLabel: emr-5.8.0
       VisibleToAllUsers: true
+      Configurations:
+        - Classification: flink-conf
+          ConfigurationProperties:
+            state.checkpoints.dir: !Sub s3://${FlinkCheckpointBucket}/checkpoint-metadata
+#        - Classification: yarn-site
+#          ConfigurationProperties:
+#            yarn.nodemanager.resource.cpu-vcores: 8
+
+
+  FlinkCheckpointBucket:
+    Type: AWS::S3::Bucket
 
   ProducerInstanceIp:
     Type: AWS::EC2::EIP
@@ -302,10 +309,10 @@ Resources:
         - !Ref AWS::Region
         - !FindInMap
           - AWSInstanceType2Arch
-          - m4.xlarge
+          - m4.4xlarge
           - Arch
       Monitoring: true
-      InstanceType: m4.xlarge
+      InstanceType: m4.4xlarge
       IamInstanceProfile: !Ref ProducerInstanceProfile
       KeyName: !Ref KeyName
       NetworkInterfaces:
@@ -352,33 +359,11 @@ Resources:
                         "view": "timeSeries",
                         "stacked": false,
                         "metrics": [
-                            [ "AWS/Kinesis", "IncomingRecords", "StreamName", "${KinesisStream}", { "period": 60, "stat": "Sum" } ],
-                            [ ".", "ReadProvisionedThroughputExceeded", ".", ".", { "period": 60, "yAxis": "right" } ],
-                            [ ".", "WriteProvisionedThroughputExceeded", ".", ".", { "period": 60, "yAxis": "right" } ]
+                            [ "AWS/Kinesis", "ReadProvisionedThroughputExceeded", "StreamName", "${KinesisStream}", { "period": 60 } ],
+                            [ ".", "WriteProvisionedThroughputExceeded", ".", ".", { "period": 60 } ]
                         ],
-                        "region": "eu-west-1"
-                    }
-                },
-                {
-                    "type": "metric",
-                    "x": 0,
-                    "y": 12,
-                    "width": 21,
-                    "height": 6,
-                    "properties": {
-                        "view": "timeSeries",
-                        "stacked": false,
-                        "metrics": [
-                            [ "AWS/EC2", "CPUUtilization", "InstanceId", "${ProducerInstance}", { "period": 60 } ],
-                            [ ".", "NetworkOut", ".", ".", { "period": 60, "yAxis": "right" } ],
-                            [ "KinesisProducerLibrary", "BufferingTime", "StreamName", "${KinesisStream}", { "period": 60 } ]
-                        ],
-                        "region": "eu-west-1",
-                        "yAxis": {
-                            "left": {
-                                "max": 100
-                            }
-                        }
+                        "region": "${AWS::Region}",
+                        "period": 60
                     }
                 },
                 {
@@ -391,10 +376,56 @@ Resources:
                         "view": "timeSeries",
                         "stacked": false,
                         "metrics": [
-                            [ "AWS/Kinesis", "GetRecords.IteratorAgeMilliseconds", "StreamName", "${KinesisStream}", { "period": 60 } ],
-                            [ "...", { "period": 60, "stat": "Maximum", "yAxis": "right" } ]
+                            [ "AWS/Kinesis", "IncomingRecords", "StreamName", "${KinesisStream}", { "period": 60, "stat":"Sum" } ],
+                            [ ".", "GetRecords.IteratorAgeMilliseconds", ".", ".", { "period": 60, "yAxis":"right" } ],
+                            [ "...", { "period": 60, "stat": "p99", "yAxis": "right" } ]
                         ],
-                        "region": "eu-west-1"
+                        "region": "${AWS::Region}",
+                        "period": 60
+                    }
+                },
+                {
+                    "type": "metric",
+                    "x": 0,
+                    "y": 12,
+                    "width": 21,
+                    "height": 6,
+                    "properties": {
+                        "view": "timeSeries",
+                        "stacked": false,
+                        "metrics": [
+                            [ "AWS/ES", "SearchableDocuments", "DomainName", "${ElasticSearch}", "ClientId", "${AWS::AccountId}", { "period": 60 } ],
+                            [ ".", "CPUUtilization", ".", ".", ".", ".", { "period": 60, "yAxis": "right" } ]
+                        ],
+                        "region": "${AWS::Region}",
+                        "yAxis": {
+                            "right": {
+                                "max": 100
+                            }
+                        }
+                    }
+                },
+                {
+                    "type": "metric",
+                    "x": 0,
+                    "y": 18,
+                    "width": 21,
+                    "height": 6,
+                    "properties": {
+                        "view": "timeSeries",
+                        "stacked": false,
+                        "metrics": [
+                            [ "AWS/EC2", "CPUUtilization", "InstanceId", "${ProducerInstance}", { "period": 60 } ],
+                            [ "...", { "period": 60, "stat": "p99" } ],
+                            [ ".", "NetworkOut", ".", ".", { "period": 60, "yAxis": "right" } ]
+                        ],
+                        "region": "${AWS::Region}",
+                        "period": 60,
+                        "yAxis": {
+                            "left": {
+                                "max": 100
+                            }
+                        }
                     }
                 }
             ]
