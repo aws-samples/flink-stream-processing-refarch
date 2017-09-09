@@ -155,7 +155,7 @@ public class ProcessTaxiStream {
           .put("region", pt.get("region", DEFAULT_REGION))
           .build();
 
-      pickupCounts.addSink(new ElasticsearchJestSink<>(config, indexName, "pickupCount"));
+      pickupCounts.addSink(new ElasticsearchJestSink<>(config, indexName, "pickup_count"));
       tripDurations.addSink(new ElasticsearchJestSink<>(config, indexName, "trip_duration"));
     }
 

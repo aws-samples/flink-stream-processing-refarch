@@ -75,7 +75,7 @@ public class ElasticsearchJestSink<T> extends RichSinkFunction<T> implements Che
 
   @Override
   public void invoke(T document)  {
-    documentBuffer.add(new Index.Builder(document).index(indexName).type(documentType).build());
+    documentBuffer.add(new Index.Builder(document.toString()).index(indexName).type(documentType).build());
 
     if (documentBuffer.size() >= batchSize || System.currentTimeMillis() - lastBufferFlush >= maxBufferTime) {
       try {
