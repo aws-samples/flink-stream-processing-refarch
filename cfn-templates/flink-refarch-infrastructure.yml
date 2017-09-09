@@ -36,7 +36,7 @@ Outputs:
 
   FlinkCommand:
     Description: Command to invoke Flink job on the EMR cluster
-    Value: !Sub flink run -p 8 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkCheckpointBucket}/checkpoint-data
+    Value: !Sub flink run -p 8 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkDataBucket}/checkpoint-data
 
   ProducerCommand:
     Description: Command to populate Kinesis stream with taxi trip events
@@ -239,13 +239,13 @@ Resources:
       ElasticsearchClusterConfig:
         InstanceCount: 2
         InstanceType: m3.large.elasticsearch
+        ZoneAwarenessEnabled: true
       EBSOptions:
         EBSEnabled: true
         VolumeType: gp2
         VolumeSize: 10
       ElasticsearchVersion: 5.5
-#      AdvancedOptions:
-#        rest.action.multi.allow_explicit_index: true
+
 
   FlinkCluster:
     Type: AWS::EMR::Cluster
@@ -272,13 +272,14 @@ Resources:
         AdditionalMasterSecurityGroups:
           - !Ref SshSecurityGroup
       JobFlowRole : !Ref EmrInstanceProfile
+      LogUri: !Sub s3://${FlinkDataBucket}/emr-logs
       ServiceRole : EMR_DefaultRole
       ReleaseLabel: emr-5.8.0
       VisibleToAllUsers: true
       Configurations:
         - Classification: flink-conf
           ConfigurationProperties:
-            state.checkpoints.dir: !Sub s3://${FlinkCheckpointBucket}/checkpoint-metadata
+            state.checkpoints.dir: !Sub s3://${FlinkDataBucket}/checkpoint-metadata
             high-availability: zookeeper
             high-availability.zookeeper.quorum: localhost:2181
 #            high-availability.zookeeper.quorum: !Sub ${FlinkCluster.MasterPublicDNS}:2181
@@ -288,7 +289,7 @@ Resources:
             dfs.replication: 3
 
 
-  FlinkCheckpointBucket:
+  FlinkDataBucket:
     Type: AWS::S3::Bucket
 
   ProducerInstanceIp:
@@ -339,12 +340,29 @@ Resources:
             yum install -y java-1.8.0-openjdk-devel.x86_64 jq tmux
             alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java
 
-#            aws cloudformation wait stack-create-complete --stack-name '${AWS::StackName}' --region ${AWS::Region}
-#
-#            curl -s https://raw.githubusercontent.com/awslabs/flink-stream-processing-refarch/master/elasticsearch/es-index.json | curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/taxi-dashboard -d @-
+            aws cloudformation wait stack-create-complete --stack-name '${AWS::StackName}' --region ${AWS::Region}
+
+            curl -s https://raw.githubusercontent.com/awslabs/flink-stream-processing-refarch/master/elasticsearch/es-index.json | curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/taxi-dashboard -d @-
 #            curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/index-pattern/taxi-dashboard -d '{"title" : "taxi-dashboard",  "timeFieldName": "timestamp"}'
 #            curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/config/5.1.1 -d '{"defaultIndex" : "taxi-dashboard"}'
 #            curl -s https://raw.githubusercontent.com/awslabs/flink-stream-processing-refarch/master/elasticsearch/kibana-visualizations-and-dashboard.json | jq -rc '.[]' | while read -r item; do jq -rn "$item | ._source" | curl -s -XPUT https://${ElasticSearch.DomainEndpoint}/.kibana/$(jq -rn "$item | [._type,._id] | join(\"/\")") -d @-; done
+
+
+  FlinkNotProcessingFromKinesisAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Alarm if Flink stops reading from the Kinesis stream or falls behind processing the available data
+      Namespace: AWS/Kinesis
+      MetricName: GetRecords.IteratorAgeMilliseconds
+      Dimensions:
+        - Name: StreamName
+          Value: !Sub ${KinesisStream}
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 60000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: breaching
 
   FlinkDashboard:
     Type: AWS::CloudWatch::Dashboard
