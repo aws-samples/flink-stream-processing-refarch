@@ -25,7 +25,7 @@
     <packaging>jar</packaging>
 
     <properties>
-        <aws.java-sdk.version>1.11.128</aws.java-sdk.version>
+        <aws.java-sdk.version>1.11.235</aws.java-sdk.version>
         <slf4j.version>1.7.25</slf4j.version>
     </properties>
 
@@ -33,7 +33,7 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>amazon-kinesis-producer</artifactId>
-            <version>0.12.5</version>
+            <version>0.12.7</version>
         </dependency>
 
         <dependency>
@@ -75,7 +75,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>1.13</version>
+            <version>1.15</version>
         </dependency>
     </dependencies>
 

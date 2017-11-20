@@ -19,6 +19,7 @@ import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.flink.refarch.utils.BackpressureSemaphore;
 import com.amazonaws.flink.refarch.utils.TaxiEventReader;
 import com.amazonaws.flink.refarch.utils.WatermarkTracker;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesis.producer.KinesisProducer;
 import com.amazonaws.services.kinesis.producer.KinesisProducerConfiguration;
 import com.amazonaws.services.kinesis.producer.UserRecordResult;
@@ -66,7 +67,7 @@ public class StreamPopulator {
         .setRecordTtl(300_000)
         .setAggregationEnabled(aggregate);
 
-    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(region).build();      //FIXME: set back to us-east-1
+    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
 
     this.streamName = streamName;
     this.speedupFactor = speedupFactor;
@@ -97,11 +98,11 @@ public class StreamPopulator {
     } else {
       StreamPopulator populator = new StreamPopulator(
           line.getOptionValue("region", "eu-west-1"),
-          line.getOptionValue("bucket", "shausma-nyc-taxi"),
-          line.getOptionValue("prefix", "data/nyc-tlc-trips.snz/"),
+          line.getOptionValue("bucket", "aws-bigdata-blog"),
+          line.getOptionValue("prefix", "artifacts/flink-refarch/data/"),
           line.getOptionValue("stream", "taxi-trip-events"),
           line.hasOption("aggregate"),
-          Float.valueOf(line.getOptionValue("speedup", "10080")),
+          Float.valueOf(line.getOptionValue("speedup", "6480")),
           Long.valueOf(line.getOptionValue("statisticsFrequency", "60000"))
       );
 
