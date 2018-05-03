@@ -278,7 +278,6 @@ Resources:
             state.checkpoints.dir: !Sub s3://${FlinkDataBucket}/checkpoint-metadata
             high-availability: zookeeper
             high-availability.zookeeper.quorum: "%{hiera('hadoop::zk')}"
-#            high-availability.zookeeper.quorum: "%{hiera('bigtop::hadoop_head_node')}:2181"
             high-availability.zookeeper.storageDir: hdfs:///flink/recovery
         - Classification: hdfs-site
           ConfigurationProperties:
