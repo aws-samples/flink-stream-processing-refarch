@@ -17,15 +17,8 @@ Parameters:
     MinLength: 9
     Type: String
 
+
 Outputs:
-  ProducerInstance:
-    Description: SSH connection to the instance that ingests trip events into the Kinesis stream
-    Value: !Sub ssh -C ec2-user@${ProducerInstance.PublicDnsName}
-
-  KibanaDashboardURL:
-    Description: URL to access the Kibana dasboards
-    Value: !Sub https://${ElasticSearch.DomainEndpoint}/_plugin/kibana/app/kibana#/dashboard/Taxi-Trips-Dashboard
-
   EmrMasterNode:
     Description: EMR master node SSH connection
     Value: !Sub ssh -C -D 8157 hadoop@${FlinkCluster.MasterPublicDNS}
@@ -36,11 +29,20 @@ Outputs:
 
   FlinkCommand:
     Description: Command to invoke Flink job on the EMR cluster
-    Value: !Sub flink run -p 4 flink-taxi-stream-processor-1.1-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkDataBucket}/checkpoint-data
+    Value: !Sub flink run -p 4 flink-taxi-stream-processor-1.1.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkDataBucket}/checkpoint-data
+
+  ProducerInstance:
+    Description: SSH connection to the instance that ingests trip events into the Kinesis stream
+    Value: !Sub ssh -C ec2-user@${ProducerInstance.PublicDnsName}
 
   ProducerCommand:
     Description: Command to populate Kinesis stream with taxi trip events
-    Value: !Sub java -jar kinesis-taxi-stream-producer-1.1-SNAPSHOT.jar -stream ${KinesisStream} -region ${AWS::Region} -speedup 6480
+    Value: !Sub java -jar kinesis-taxi-stream-producer-1.1.jar -stream ${KinesisStream} -region ${AWS::Region} -speedup 6480
+  
+  KibanaDashboardURL:
+    Description: URL to access the Kibana dasboards
+    Value: !Sub https://${ElasticSearch.DomainEndpoint}/_plugin/kibana/app/kibana#/dashboard/Taxi-Trips-Dashboard
+
 
 Resources:
   AttachGateway:
