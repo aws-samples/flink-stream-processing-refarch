@@ -60,7 +60,7 @@ public class StreamPopulator {
   private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
 
 
-  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies) {
+  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, boolean shiftDropoffTime) {
     KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
         .setRegion(region)
         .setCredentialsRefreshDelay(500)
@@ -73,9 +73,14 @@ public class StreamPopulator {
     this.speedupFactor = speedupFactor;
     this.statisticsFrequencyMillies = statisticsFrequencyMillies;
     this.kinesisProducer = new KinesisProducer(producerConfiguration);
-    this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
     this.watermarkTracker = new WatermarkTracker(region, streamName);
     this.backpressureSemaphore = new BackpressureSemaphore<>(MAX_OUTSTANDING_RECORD_COUNT);
+
+    if (shiftDropoffTime) {
+      this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix, DateTime.now());
+    } else {
+      this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
+    }
   }
 
 
@@ -89,6 +94,7 @@ public class StreamPopulator {
         .addOption("aggregate", "turn on aggregation of multiple events into a kinesis record")
         .addOption("seek", true, "start replaying events at given timestamp")
         .addOption("statisticsFrequency", true, "print statistics every statisticFrequency ms")
+        .addOption("shiftTime", "shift the time of the events so that the dropoff time of the first event equals the invocation time")
         .addOption("help", "print this help message");
 
     CommandLine line = new DefaultParser().parse(options, args);
@@ -103,7 +109,8 @@ public class StreamPopulator {
           line.getOptionValue("stream", "taxi-trip-events"),
           line.hasOption("aggregate"),
           Float.valueOf(line.getOptionValue("speedup", "6480")),
-          Long.valueOf(line.getOptionValue("statisticsFrequency", "60000"))
+          Long.valueOf(line.getOptionValue("statisticsFrequency", "60000")),
+          line.hasOption("shiftTime")
       );
 
       if (line.hasOption("seek")) {
@@ -157,7 +164,7 @@ public class StreamPopulator {
       } else {
         //queue the next event for ingestion to the Kinesis stream through the KPL
         ListenableFuture<UserRecordResult> f = kinesisProducer.addUserRecord(
-            streamName, Integer.toString(nextEvent.hashCode()), nextEvent.payload);
+            streamName, Integer.toString(nextEvent.hashCode()), nextEvent.toByteBuffer());
 
         //monitor if the event has actually been sent and adapt the largest possible watermark value accordingly
         watermarkTracker.trackTimestamp(f, nextEvent);

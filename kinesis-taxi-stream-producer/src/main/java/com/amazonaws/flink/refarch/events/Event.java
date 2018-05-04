@@ -23,10 +23,10 @@ import java.util.Objects;
 public class Event {
   public static final String TYPE_FIELD = "type";
 
-  public final ByteBuffer payload;
+  public final String payload;
 
   public Event(String payload) {
-    this.payload = ByteBuffer.wrap(payload.getBytes(Charset.forName("UTF-8")));
+    this.payload = payload;
   }
 
   @Override
@@ -36,6 +36,10 @@ public class Event {
 
   @Override
   public String toString() {
-    return Charset.forName("UTF-8").decode(payload).toString();
+    return payload;
+  }
+
+  public ByteBuffer toByteBuffer() {
+    return ByteBuffer.wrap(payload.getBytes(Charset.forName("UTF-8")));
   }
 }

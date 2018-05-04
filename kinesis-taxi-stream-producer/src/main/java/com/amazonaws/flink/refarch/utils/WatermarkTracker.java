@@ -81,7 +81,7 @@ public class WatermarkTracker {
       shards.parallelStream()
           .map(shard -> new PutRecordRequest()
               .withStreamName(streamName)
-              .withData(new WatermarkEvent(currentWatermark).payload)
+              .withData(new WatermarkEvent(currentWatermark).toByteBuffer())
               .withPartitionKey("23")
               .withExplicitHashKey(shard.getHashKeyRange().getStartingHashKey()))
           .map(kinesisClient::putRecord)
