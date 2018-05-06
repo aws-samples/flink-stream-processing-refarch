@@ -125,6 +125,7 @@ Resources:
                   "Effect": "Allow",
                   "Action": [
                       "kinesis:DescribeStream",
+                      "kinesis:ListShards",
                       "kinesis:GetShardIterator",
                       "kinesis:GetRecords",
                       "kinesis:PutRecord",

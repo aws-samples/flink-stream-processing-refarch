@@ -19,12 +19,7 @@ import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.flink.refarch.events.WatermarkEvent;
 import com.amazonaws.services.kinesis.AmazonKinesis;
 import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder;
-import com.amazonaws.services.kinesis.model.DescribeStreamRequest;
-import com.amazonaws.services.kinesis.model.DescribeStreamResult;
-import com.amazonaws.services.kinesis.model.LimitExceededException;
-import com.amazonaws.services.kinesis.model.ProvisionedThroughputExceededException;
-import com.amazonaws.services.kinesis.model.PutRecordRequest;
-import com.amazonaws.services.kinesis.model.Shard;
+import com.amazonaws.services.kinesis.model.*;
 import com.amazonaws.services.kinesis.producer.UserRecordResult;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -32,6 +27,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.PriorityBlockingQueue;
+
+import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,7 +87,7 @@ public class WatermarkTracker {
       LOG.debug("send watermark {}", new DateTime(currentWatermark));
     } catch (LimitExceededException | ProvisionedThroughputExceededException e) {
       //if any request is throttled, just wait for the next iteration to submit another watermark
-      LOG.warn("skipping watermark due to limit exceeded exception");
+      LOG.warn("skipping watermark due to limit/throughput exceeded exception");
     }
   }
 
@@ -106,24 +103,29 @@ public class WatermarkTracker {
 
 
   private void refreshShards() {
-    DescribeStreamRequest describeStreamRequest = new DescribeStreamRequest();
-    describeStreamRequest.setStreamName(streamName);
-    String exclusiveStartShardId = null;
-    List<Shard> shards = new ArrayList<>();
+    try {
+      String nextToken = "";
+      List<Shard> shards = new ArrayList<>();
 
-    do {
-      describeStreamRequest.setExclusiveStartShardId(exclusiveStartShardId);
-      DescribeStreamResult describeStreamResult = kinesisClient.describeStream(describeStreamRequest);
-      shards.addAll(describeStreamResult.getStreamDescription().getShards());
+      do {
+        final ListShardsRequest request = new ListShardsRequest();
+        if (StringUtils.isEmpty(nextToken)) {
+          request.setStreamName(streamName);
+        } else {
+          request.setNextToken(nextToken);
+        }
 
-      if (describeStreamResult.getStreamDescription().getHasMoreShards() && shards.size() > 0) {
-        exclusiveStartShardId = shards.get(shards.size() - 1).getShardId();
-      } else {
-        exclusiveStartShardId = null;
-      }
-    } while (exclusiveStartShardId != null);
+        ListShardsResult result = kinesisClient.listShards(request);
 
-    this.shards = shards;
+        shards.addAll(result.getShards());
+        nextToken = result.getNextToken();
+      } while (!StringUtils.isEmpty(nextToken));
+
+      this.shards = shards;
+    } catch (LimitExceededException | ResourceInUseException e) {
+      //if the request is throttled, just wait for the next invocation and use cached shard description in the meantime
+      LOG.debug("skipping watermark due to limit exceeded/resource in use exception");
+    }
   }
 
 
