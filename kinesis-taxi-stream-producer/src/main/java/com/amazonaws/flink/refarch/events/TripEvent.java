@@ -15,12 +15,12 @@
 
 package com.amazonaws.flink.refarch.events;
 
+import com.amazonaws.flink.refarch.utils.AdaptTime;
 import com.amazonaws.util.json.Jackson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.joda.time.DateTime;
 import org.joda.time.Duration;
-
 
 
 public class TripEvent extends Event implements Comparable<TripEvent> {
@@ -31,6 +31,8 @@ public class TripEvent extends Event implements Comparable<TripEvent> {
   private final static String DROPOFF_DATETIME = "dropoff_datetime";
   private final static String PICKUP_DATETIME = "pickup_datetime";
 
+  private final static Duration DELTA_TO_FIRST_DROPOFF_TIME = new Duration(new DateTime("2016-01-01T00:00:00.000Z"), DateTime.now());
+
 
   public TripEvent(String payload)  {
     super(payload);
@@ -40,22 +42,43 @@ public class TripEvent extends Event implements Comparable<TripEvent> {
     this.timestamp = new DateTime(json.get(DROPOFF_DATETIME).asText()).getMillis();
   }
 
-  public TripEvent(String payload, DateTime timeOrigin) {
-    this(shiftDropoffTime(payload, timeOrigin));
+  public static TripEvent fromString(String payload, AdaptTime adaptTime) {
+    switch (adaptTime) {
+      case ORIGINAL:
+        return new TripEvent(payload);
+      case INVOCATION:
+        return fromStringShiftOrigin(payload, DELTA_TO_FIRST_DROPOFF_TIME);
+      case INGESTION:
+        return fromStringOverwriteTime(payload);
+      default:
+        throw new IllegalArgumentException();
+    }
   }
 
-  private static String shiftDropoffTime(String payload, DateTime timeOrigin) {
+  public static TripEvent fromStringShiftOrigin(String payload, Duration timeDelta) {
     ObjectNode json = (ObjectNode) Jackson.fromJsonString(payload, JsonNode.class);
 
     DateTime pickupTime = new DateTime(json.get(PICKUP_DATETIME).asText());
     DateTime dropoffTime = new DateTime(json.get(DROPOFF_DATETIME).asText());
 
-    Duration timeDelta = new Duration(timeOrigin, pickupTime);
+    json.put(PICKUP_DATETIME, pickupTime.plus(timeDelta).toString());
+    json.put(DROPOFF_DATETIME, dropoffTime.plus(timeDelta).toString());
 
-    json.put(PICKUP_DATETIME, pickupTime.minus(timeDelta).toString());
-    json.put(DROPOFF_DATETIME, dropoffTime.minus(timeDelta).toString());
+    return new TripEvent(json.toString());
+  }
 
-    return json.toString();
+  public static TripEvent fromStringOverwriteTime(String payload) {
+    ObjectNode json = (ObjectNode) Jackson.fromJsonString(payload, JsonNode.class);
+
+    DateTime pickupTime = new DateTime(json.get(PICKUP_DATETIME).asText());
+    DateTime dropoffTime = new DateTime(json.get(DROPOFF_DATETIME).asText());
+
+    Duration timeDelta = new Duration(dropoffTime, DateTime.now());
+
+    json.put(PICKUP_DATETIME, pickupTime.plus(timeDelta).toString());
+    json.put(DROPOFF_DATETIME, dropoffTime.plus(timeDelta).toString());
+
+    return new TripEvent(json.toString());
   }
 
   @Override

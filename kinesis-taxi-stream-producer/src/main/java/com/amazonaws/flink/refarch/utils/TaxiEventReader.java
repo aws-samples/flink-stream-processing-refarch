@@ -26,9 +26,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Iterator;
+
 import org.apache.commons.compress.compressors.CompressorException;
 import org.apache.commons.compress.compressors.CompressorStreamFactory;
-import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +37,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
   private static final Logger LOG = LoggerFactory.getLogger(TaxiEventReader.class);
 
   private final AmazonS3 s3;
-  private final DateTime timeOrigin;
+  private final AdaptTime adaptTime;
   private final Iterator<S3ObjectSummary> s3Objects;
   private S3Object s3Object;
   private BufferedReader objectStream;
@@ -46,12 +46,12 @@ public class TaxiEventReader implements Iterator<TripEvent> {
   private boolean hasNext = true;
 
   public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix) {
-    this(s3, bucketName, prefix, null);
+    this(s3, bucketName, prefix, AdaptTime.ORIGINAL);
   }
 
-  public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix, DateTime timeOrigin) {
+  public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix, AdaptTime adaptTime) {
     this.s3 = s3;
-    this.timeOrigin = timeOrigin;
+    this.adaptTime = adaptTime;
     this.s3Objects = S3Objects.withPrefix(s3, bucketName, prefix).iterator();
 
     //initialize next and hasNext fields
@@ -140,11 +140,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
 
       try {
         //parse the next event and return the current one
-        if (timeOrigin == null) {
-          next = new TripEvent(nextLine);
-        } else {
-          next = new TripEvent(nextLine, timeOrigin);
-        }
+          next = TripEvent.fromString(nextLine, adaptTime);
 
         return result;
       } catch (IllegalArgumentException e) {

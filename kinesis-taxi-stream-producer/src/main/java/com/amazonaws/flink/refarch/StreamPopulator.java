@@ -18,6 +18,7 @@ package com.amazonaws.flink.refarch;
 import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.flink.refarch.utils.BackpressureSemaphore;
 import com.amazonaws.flink.refarch.utils.TaxiEventReader;
+import com.amazonaws.flink.refarch.utils.AdaptTime;
 import com.amazonaws.flink.refarch.utils.WatermarkTracker;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesis.producer.KinesisProducer;
@@ -60,7 +61,7 @@ public class StreamPopulator {
   private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
 
 
-  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, boolean shiftDropoffTime) {
+  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, String timeOrigin) {
     KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
         .setRegion(region)
         .setCredentialsRefreshDelay(500)
@@ -75,12 +76,7 @@ public class StreamPopulator {
     this.kinesisProducer = new KinesisProducer(producerConfiguration);
     this.watermarkTracker = new WatermarkTracker(region, streamName);
     this.backpressureSemaphore = new BackpressureSemaphore<>(MAX_OUTSTANDING_RECORD_COUNT);
-
-    if (shiftDropoffTime) {
-      this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix, DateTime.now());
-    } else {
-      this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
-    }
+    this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix, AdaptTime.valueOf(timeOrigin.toUpperCase()));
   }
 
 
@@ -94,7 +90,7 @@ public class StreamPopulator {
         .addOption("aggregate", "turn on aggregation of multiple events into a kinesis record")
         .addOption("seek", true, "start replaying events at given timestamp")
         .addOption("statisticsFrequency", true, "print statistics every statisticFrequency ms")
-        .addOption("shiftTime", "shift the time of the events so that the dropoff time of the first event equals the invocation time")
+        .addOption("adaptTime", true,"adapts the time of the events; shifts time origin to the invocation of the program (invocation) or sets the time to the ingestion of the event into the stream (ingestion)")
         .addOption("help", "print this help message");
 
     CommandLine line = new DefaultParser().parse(options, args);
@@ -110,7 +106,7 @@ public class StreamPopulator {
           line.hasOption("aggregate"),
           Float.valueOf(line.getOptionValue("speedup", "6480")),
           Long.valueOf(line.getOptionValue("statisticsFrequency", "60000")),
-          line.hasOption("shiftTime")
+          line.getOptionValue("adaptTime", "original")
       );
 
       if (line.hasOption("seek")) {
