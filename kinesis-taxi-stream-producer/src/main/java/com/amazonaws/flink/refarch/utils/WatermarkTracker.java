@@ -91,7 +91,7 @@ public class WatermarkTracker {
     }
   }
 
-  private void refreshWatermark(TripEvent nextEvent) {
+  public long refreshWatermark(TripEvent nextEvent) {
     TripEvent oldestEvent = inflightEvents.poll();
 
     if (oldestEvent == null) {
@@ -99,6 +99,8 @@ public class WatermarkTracker {
     } else {
       currentWatermark = oldestEvent.timestamp - 1;
     }
+
+    return currentWatermark;
   }
 
 

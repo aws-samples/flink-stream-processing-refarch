@@ -54,6 +54,7 @@ public class StreamPopulator {
 
   private final String streamName;
   private final float speedupFactor;
+  private final boolean noWatermark;
   private final long statisticsFrequencyMillies;
   private final KinesisProducer kinesisProducer;
   private final TaxiEventReader taxiEventReader;
@@ -61,7 +62,7 @@ public class StreamPopulator {
   private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
 
 
-  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, String timeOrigin) {
+  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, String timeOrigin, boolean noWatermark) {
     KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
         .setRegion(region)
         .setCredentialsRefreshDelay(500)
@@ -72,11 +73,12 @@ public class StreamPopulator {
 
     this.streamName = streamName;
     this.speedupFactor = speedupFactor;
+    this.noWatermark = noWatermark;
     this.statisticsFrequencyMillies = statisticsFrequencyMillies;
     this.kinesisProducer = new KinesisProducer(producerConfiguration);
     this.watermarkTracker = new WatermarkTracker(region, streamName);
     this.backpressureSemaphore = new BackpressureSemaphore<>(MAX_OUTSTANDING_RECORD_COUNT);
-    this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix, AdaptTime.valueOf(timeOrigin.toUpperCase()));
+    this.taxiEventReader = new TaxiEventReader(s3, bucketName, objectPrefix);
   }
 
 
@@ -91,6 +93,7 @@ public class StreamPopulator {
         .addOption("seek", true, "start replaying events at given timestamp")
         .addOption("statisticsFrequency", true, "print statistics every statisticFrequency ms")
         .addOption("adaptTime", true,"adapts the time of the events; shifts time origin to the invocation of the program (invocation) or sets the time to the ingestion of the event into the stream (ingestion)")
+        .addOption("noWatermark", "don't ingest watermarks into the stream")
         .addOption("help", "print this help message");
 
     CommandLine line = new DefaultParser().parse(options, args);
@@ -106,7 +109,8 @@ public class StreamPopulator {
           line.hasOption("aggregate"),
           Float.valueOf(line.getOptionValue("speedup", "6480")),
           Long.valueOf(line.getOptionValue("statisticsFrequency", "60000")),
-          line.getOptionValue("adaptTime", "original")
+          line.getOptionValue("adaptTime", "original"),
+          line.hasOption("noWatermark")
       );
 
       if (line.hasOption("seek")) {
@@ -184,7 +188,11 @@ public class StreamPopulator {
 
       //emit a watermark to every shard of the Kinesis stream every WATERMARK_MILLIS ms or WATERMARK_EVENT_COUNT events, whatever comes first
       if (System.currentTimeMillis() - lastWatermarkSentTime >= WATERMARK_MILLIS || watermarkBatchEventCount >= WATERMARK_EVENT_COUNT) {
-        lastWatermark = watermarkTracker.sentWatermark(nextEvent);
+        if (noWatermark) {
+          lastWatermark = watermarkTracker.refreshWatermark(nextEvent);
+        } else {
+          lastWatermark = watermarkTracker.sentWatermark(nextEvent);
+        }
 
         watermarkBatchEventCount = 0;
         lastWatermarkSentTime = System.currentTimeMillis();
