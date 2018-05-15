@@ -18,7 +18,6 @@ package com.amazonaws.flink.refarch;
 import com.amazonaws.flink.refarch.events.TripEvent;
 import com.amazonaws.flink.refarch.utils.BackpressureSemaphore;
 import com.amazonaws.flink.refarch.utils.TaxiEventReader;
-import com.amazonaws.flink.refarch.utils.AdaptTime;
 import com.amazonaws.flink.refarch.utils.WatermarkTracker;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesis.producer.KinesisProducer;
@@ -60,9 +59,10 @@ public class StreamPopulator {
   private final TaxiEventReader taxiEventReader;
   private final WatermarkTracker watermarkTracker;
   private final BackpressureSemaphore<UserRecordResult> backpressureSemaphore;
+  private final AdaptTimeOption adaptTimeOptionOption;
 
 
-  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, String timeOrigin, boolean noWatermark) {
+  public StreamPopulator(String region, String bucketName, String objectPrefix, String streamName, boolean aggregate, float speedupFactor, long statisticsFrequencyMillies, String adaptTimeOption, boolean noWatermark) {
     KinesisProducerConfiguration producerConfiguration = new KinesisProducerConfiguration()
         .setRegion(region)
         .setCredentialsRefreshDelay(500)
@@ -74,6 +74,7 @@ public class StreamPopulator {
     this.streamName = streamName;
     this.speedupFactor = speedupFactor;
     this.noWatermark = noWatermark;
+    this.adaptTimeOptionOption = AdaptTimeOption.valueOf(adaptTimeOption.toUpperCase());
     this.statisticsFrequencyMillies = statisticsFrequencyMillies;
     this.kinesisProducer = new KinesisProducer(producerConfiguration);
     this.watermarkTracker = new WatermarkTracker(region, streamName);
@@ -162,6 +163,9 @@ public class StreamPopulator {
           LOG.error(e.getMessage());
         }
       } else {
+        //adapt the time of the event before ingestion into the stream
+        nextEvent = TripEvent.adaptTime(nextEvent, adaptTimeOptionOption);
+
         //queue the next event for ingestion to the Kinesis stream through the KPL
         ListenableFuture<UserRecordResult> f = kinesisProducer.addUserRecord(
             streamName, Integer.toString(nextEvent.hashCode()), nextEvent.toByteBuffer());
@@ -188,13 +192,12 @@ public class StreamPopulator {
 
       //emit a watermark to every shard of the Kinesis stream every WATERMARK_MILLIS ms or WATERMARK_EVENT_COUNT events, whatever comes first
       if (System.currentTimeMillis() - lastWatermarkSentTime >= WATERMARK_MILLIS || watermarkBatchEventCount >= WATERMARK_EVENT_COUNT) {
-        if (noWatermark) {
-          lastWatermark = watermarkTracker.refreshWatermark(nextEvent);
-        } else {
-          lastWatermark = watermarkTracker.sentWatermark(nextEvent);
+        if (!noWatermark) {
+          watermarkTracker.sentWatermark();
         }
 
         watermarkBatchEventCount = 0;
+        lastWatermark = watermarkTracker.getCurrentWatermark();
         lastWatermarkSentTime = System.currentTimeMillis();
       }
 

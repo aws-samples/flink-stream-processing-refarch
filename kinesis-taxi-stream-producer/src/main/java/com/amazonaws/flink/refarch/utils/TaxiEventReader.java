@@ -37,7 +37,6 @@ public class TaxiEventReader implements Iterator<TripEvent> {
   private static final Logger LOG = LoggerFactory.getLogger(TaxiEventReader.class);
 
   private final AmazonS3 s3;
-  private final AdaptTime adaptTime;
   private final Iterator<S3ObjectSummary> s3Objects;
   private S3Object s3Object;
   private BufferedReader objectStream;
@@ -46,12 +45,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
   private boolean hasNext = true;
 
   public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix) {
-    this(s3, bucketName, prefix, AdaptTime.ORIGINAL);
-  }
-
-  public TaxiEventReader(AmazonS3 s3, String bucketName, String prefix, AdaptTime adaptTime) {
     this.s3 = s3;
-    this.adaptTime = adaptTime;
     this.s3Objects = S3Objects.withPrefix(s3, bucketName, prefix).iterator();
 
     //initialize next and hasNext fields
@@ -140,7 +134,7 @@ public class TaxiEventReader implements Iterator<TripEvent> {
 
       try {
         //parse the next event and return the current one
-          next = TripEvent.fromString(nextLine, adaptTime);
+          next = new TripEvent(nextLine);
 
         return result;
       } catch (IllegalArgumentException e) {

@@ -54,18 +54,17 @@ public class WatermarkTracker {
   }
 
 
-  public long sentWatermark(TripEvent nextEvent) {
-    //determine the larges possible watermark value
-    refreshWatermark(nextEvent);
-
+  public void sentWatermark() {
     //asynchronously ingest the watermark to every shard of the Kinesis stream
-    new Thread(this::sentWatermark).start();
+    new Thread(this::sentWatermarkToShards).start();
+  }
 
+  public long getCurrentWatermark() {
     return currentWatermark;
   }
 
 
-  private void sentWatermark() {
+  private void sentWatermarkToShards() {
     try {
       //refresh the list of available shards, if current state is too old
       if (System.currentTimeMillis() - lastShardRefreshTime >= SHARD_REFRESH_MILLIES) {
@@ -91,6 +90,8 @@ public class WatermarkTracker {
     }
   }
 
+
+  /*
   public long refreshWatermark(TripEvent nextEvent) {
     TripEvent oldestEvent = inflightEvents.poll();
 
@@ -102,6 +103,7 @@ public class WatermarkTracker {
 
     return currentWatermark;
   }
+  */
 
 
   private void refreshShards() {
@@ -152,6 +154,13 @@ public class WatermarkTracker {
 
     private void removeEvent() {
       inflightEvents.remove(event);
+
+      TripEvent oldestEventInQueue = inflightEvents.poll();
+
+      //determine the larges possible watermark value, this assumes that events are sent in order
+      if (oldestEventInQueue != null && event.timestamp < oldestEventInQueue.timestamp) {
+        currentWatermark = event.timestamp;
+      }
     }
 
     @Override

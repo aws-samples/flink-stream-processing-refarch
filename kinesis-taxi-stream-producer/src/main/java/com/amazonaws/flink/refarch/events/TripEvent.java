@@ -15,7 +15,7 @@
 
 package com.amazonaws.flink.refarch.events;
 
-import com.amazonaws.flink.refarch.utils.AdaptTime;
+import com.amazonaws.flink.refarch.AdaptTimeOption;
 import com.amazonaws.util.json.Jackson;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -42,14 +42,14 @@ public class TripEvent extends Event implements Comparable<TripEvent> {
     this.timestamp = new DateTime(json.get(DROPOFF_DATETIME).asText()).getMillis();
   }
 
-  public static TripEvent fromString(String payload, AdaptTime adaptTime) {
-    switch (adaptTime) {
+  public static TripEvent adaptTime(TripEvent event, AdaptTimeOption adaptTimeOption) {
+    switch (adaptTimeOption) {
       case ORIGINAL:
-        return new TripEvent(payload);
+        return event;
       case INVOCATION:
-        return fromStringShiftOrigin(payload, DELTA_TO_FIRST_DROPOFF_TIME);
+        return fromStringShiftOrigin(event.payload, DELTA_TO_FIRST_DROPOFF_TIME);
       case INGESTION:
-        return fromStringOverwriteTime(payload);
+        return fromStringOverwriteTime(event.payload);
       default:
         throw new IllegalArgumentException();
     }
