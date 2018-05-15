@@ -105,7 +105,7 @@ public class StreamPopulator {
       StreamPopulator populator = new StreamPopulator(
           line.getOptionValue("region", "eu-west-1"),
           line.getOptionValue("bucket", "aws-bigdata-blog"),
-          line.getOptionValue("prefix", "artifacts/flink-refarch/data/"),
+          line.getOptionValue("prefix", "artifacts/flink-refarch/data/nyc-tlc-trips.snz/"),
           line.getOptionValue("stream", "taxi-trip-events"),
           line.hasOption("aggregate"),
           Float.valueOf(line.getOptionValue("speedup", "6480")),
