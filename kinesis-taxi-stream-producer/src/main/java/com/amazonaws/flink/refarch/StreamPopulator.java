@@ -69,7 +69,7 @@ public class StreamPopulator {
         .setRecordTtl(300_000)
         .setAggregationEnabled(aggregate);
 
-    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
+    final AmazonS3 s3 = AmazonS3ClientBuilder.standard().withForceGlobalBucketAccessEnabled(true).build();
 
     this.streamName = streamName;
     this.speedupFactor = speedupFactor;
