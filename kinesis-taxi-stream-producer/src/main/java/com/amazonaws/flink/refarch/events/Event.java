@@ -26,7 +26,12 @@ public class Event {
   public final String payload;
 
   public Event(String payload) {
-    this.payload = payload;
+    if (!payload.endsWith("\n")) {
+      //append a newline to output to make it easier digestible by firehose and athena
+      this.payload = payload + "\n";
+    } else {
+      this.payload = payload;
+    }
   }
 
   @Override
