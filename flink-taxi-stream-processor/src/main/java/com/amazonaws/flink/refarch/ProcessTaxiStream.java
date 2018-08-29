@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"). You may
  * not use this file except in compliance with the License. A copy of the
@@ -26,9 +26,6 @@ import com.amazonaws.flink.refarch.utils.ElasticsearchJestSink;
 import com.amazonaws.flink.refarch.utils.GeoUtils;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import java.net.URI;
-import java.util.Properties;
-import java.util.stream.StreamSupport;
 import org.apache.flink.api.java.tuple.Tuple;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -48,6 +45,10 @@ import org.apache.flink.util.Collector;
 import org.joda.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.Properties;
+import java.util.stream.StreamSupport;
 
 
 public class ProcessTaxiStream {
