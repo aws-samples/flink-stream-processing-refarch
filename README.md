@@ -28,7 +28,7 @@ To start the Flink runtime and submit the Flink program that is doing the analys
 $ ssh -C -D 8157 «EMR master node IP»
 ```
 
-The EMR cluster that is provisioned by the CloudFormation template comes with two c4.xlarge core nodes with four vCPUs each. Generally, you match the number of node cores to the number of slots per task manager. For this post, it is reasonable to start a long-running Flink cluster with two task managers and four slots per task manager:
+The EMR cluster that is provisioned by the CloudFormation template comes with two c4.large core nodes with two vCPUs each. Generally, you match the number of node cores to the number of slots per task manager. For this post, it is reasonable to start a long-running Flink cluster with two task managers and two slots per task manager:
 
 ```
 $ flink-yarn-session -n 2 -s 2 -jm 768 -tm 1024 -d
