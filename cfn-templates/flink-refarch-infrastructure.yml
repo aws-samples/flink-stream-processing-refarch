@@ -273,7 +273,7 @@ Resources:
       JobFlowRole : !Ref EmrInstanceProfile
       LogUri: !Sub s3://${FlinkDataBucket}/emr-logs
       ServiceRole : EMR_DefaultRole
-      ReleaseLabel: emr-5.13.0
+      ReleaseLabel: emr-5.16.0
       VisibleToAllUsers: true
       Configurations:
         - Classification: flink-conf

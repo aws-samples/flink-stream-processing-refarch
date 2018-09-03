@@ -6,7 +6,7 @@ Parameters:
   FlinkVersion:
     Description: Flink version to build
     Type: String
-    Default: 1.4.2
+    Default: 1.5.2
     AllowedPattern: \d\.\d\.\d
 
 Outputs:
@@ -150,7 +150,7 @@ Resources:
                 - curl -s https://archive.apache.org/dist/maven/maven-3/3.2.5/binaries/apache-maven-3.2.5-bin.tar.gz | tar xz -C /tmp/
             build:
               commands:
-                - cd flink-* && /tmp/apache-maven-3.2.5/bin/mvn clean package -B -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Pinclude-kinesis -Dhadoop-two.version=2.8.3
+                - cd flink-* && /tmp/apache-maven-3.2.5/bin/mvn clean package -B -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Pinclude-kinesis -Dhadoop-two.version=2.8.4
                 - cd flink-*/flink-connectors/flink-connector-kinesis &&  /tmp/apache-maven-3.2.5/bin/mvn flatten:flatten -DflattenedPomFilename=pom.xml.flattened
             post_build:
               commands:
