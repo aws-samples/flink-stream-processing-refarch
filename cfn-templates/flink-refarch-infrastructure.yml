@@ -29,7 +29,7 @@ Outputs:
 
   FlinkCommand:
     Description: Command to invoke Flink job on the EMR cluster
-    Value: !Sub flink run -p 4 flink-taxi-stream-processor-1.2-SNAPSHOT.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkDataBucket}/checkpoint-data
+    Value: !Sub flink run -p 4 flink-taxi-stream-processor-1.3.jar --region ${AWS::Region} --stream ${KinesisStream} --es-endpoint https://${ElasticSearch.DomainEndpoint} --checkpoint s3://${FlinkDataBucket}/checkpoint-data
 
   ProducerInstance:
     Description: SSH connection to the instance that ingests trip events into the Kinesis stream
@@ -37,7 +37,7 @@ Outputs:
 
   ProducerCommand:
     Description: Command to populate Kinesis stream with taxi trip events
-    Value: !Sub java -jar kinesis-taxi-stream-producer-1.2-SNAPSHOT.jar -stream ${KinesisStream} -region ${AWS::Region} -speedup 6480
+    Value: !Sub java -jar kinesis-taxi-stream-producer-1.3.jar -stream ${KinesisStream} -region ${AWS::Region} -speedup 6480
   
   KibanaDashboardURL:
     Description: URL to access the Kibana dasboards

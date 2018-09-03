@@ -31,15 +31,15 @@ $ ssh -C -D 8157 «EMR master node IP»
 The EMR cluster that is provisioned by the CloudFormation template comes with two c4.xlarge core nodes with four vCPUs each. Generally, you match the number of node cores to the number of slots per task manager. For this post, it is reasonable to start a long-running Flink cluster with two task managers and four slots per task manager:
 
 ```
-$ HADOOP_CONF_DIR=/etc/hadoop/conf /usr/lib/flink/bin/yarn-session.sh -n 2 -s 4 -tm 4096 -d
+$ flink-yarn-session -n 2 -s 2 -jm 768 -tm 1024 -d
 ```
 
 After the Flink runtime is up and running, the taxi stream processor program can be submitted to the Flink runtime to start the real-time analysis of the trip events in the Amazon Kinesis stream.
 
 ```
-$ aws s3 cp s3://«artifact-bucket»/artifacts/flink-taxi-stream-processor-1.0.jar .
+$ aws s3 cp s3://«artifact-bucket»/artifacts/flink-taxi-stream-processor-1.3.jar .
 
-$ flink run -p 8 flink-taxi-stream-processor-1.0.jar --region «AWS region» --stream «Kinesis stream name» --es-endpoint https://«Elasticsearch endpoint»
+$ flink run -p 4 flink-taxi-stream-processor-1.3.jar --region «AWS region» --stream «Kinesis stream name» --es-endpoint https://«Elasticsearch endpoint» --checkpoint s3://«Checkpoint bucket»
 ```
 
 Now that the Flink application is running, it is reading the incoming events from the stream, aggregating them in time windows according to the time of the events, and sending the results to Amazon ES. The Flink application takes care of batching records so as not to overload the Elasticsearch cluster with small requests and of [signing the batched requests](https://aws.amazon.com/blogs/database/set-access-control-for-amazon-elasticsearch-service/) to enable a secure configuration of the Elasticsearch cluster.
@@ -53,9 +53,9 @@ To ingest the events, use the taxi stream producer application, which replays a 
 ```
 $ ssh -C «producer instance IP»
 
-$ aws s3 cp s3://«artifact-bucket»/artifacts/kinesis-taxi-stream-producer-1.0.jar .
+$ aws s3 cp s3://«Artifact bucket»/artifacts/kinesis-taxi-stream-producer-1.3.jar .
 
-$ java -jar kinesis-taxi-stream-producer-1.0.jar -speedup 1440 -stream «Kinesis stream name» -region «AWS region»
+$ java -jar kinesis-taxi-stream-producer-1.3.jar -speedup 6480 -stream «Kinesis stream name» -region «AWS region»
 ```
 
 This application is by no means specific to the reference architecture discussed in this post. You can easily reuse it for other purposes as well, for example, building a similar stream processing architecture based on Amazon Kinesis Analytics instead of Apache Flink.
