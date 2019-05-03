@@ -4,6 +4,7 @@ This repository contains the resources of the reference architecture for real-ti
 
 The following example illustrates a scenario related to optimizing taxi fleet operations. You build a real-time stream processing pipeline that continuously receives information from a fleet of taxis operating in New York City. Using this data, you want to optimize the operations by analyzing the gathered data in real time and making data-based decisions.
 
+***As of November 2018, you can run Apache Flink programs with [Amazon Kinesis Analytics for Java Applications](https://aws.amazon.com/kinesis/data-analytics/) in a fully managed environment. You can find further details in a new [blog post on the AWS Big Data Blog](https://aws.amazon.com/blogs/big-data/build-and-run-streaming-applications-with-apache-flink-and-amazon-kinesis-data-analytics-for-java-applications/) and in this [Github repository](https://github.com/aws-samples/amazon-kinesis-analytics-taxi-consumer).***
 
 ## Building and running the reference architecture
 
