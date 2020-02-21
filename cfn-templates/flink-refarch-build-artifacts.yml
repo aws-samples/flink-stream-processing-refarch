@@ -12,7 +12,7 @@ Parameters:
 Outputs:
   ArtifactBucket:
     Description: Bucket containing the compiled artifacts
-    Value: !GetAtt ArtifactBucket.DomainName
+    Value: !Ref ArtifactBucket
 
   KinesisTaxiTripProducerCopyCommand:
     Description: Command for copying the producer artifact to the Kibana bastion host
