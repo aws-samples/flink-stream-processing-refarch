@@ -150,11 +150,10 @@ Resources:
                 - curl -s https://archive.apache.org/dist/maven/maven-3/3.2.5/binaries/apache-maven-3.2.5-bin.tar.gz | tar xz -C /tmp/
             build:
               commands:
-                - cd flink-* && /tmp/apache-maven-3.2.5/bin/mvn clean package -B -DskipTests -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Pinclude-kinesis -Dhadoop-two.version=2.8.4
-                - cd flink-*/flink-connectors/flink-connector-kinesis &&  /tmp/apache-maven-3.2.5/bin/mvn flatten:flatten -DflattenedPomFilename=pom.xml.flattened
+                - cd flink-* && /tmp/apache-maven-3.2.5/bin/mvn clean package -B -DskipTests -Dfast -Pinclude-kinesis -pl flink-connectors/flink-connector-kinesis
+                - for jar in flink-*/flink-connectors/flink-connector-kinesis/target/flink-connector-kinesis_????-?????.jar; do mv ${!jar%/*}/dependency-reduced-pom.xml ${!jar%.jar}.pom.xml; done
             post_build:
               commands:
-                - for jar in flink-*/flink-connectors/flink-connector-kinesis/target/flink-connector-kinesis_????-?????.jar; do mv ${!jar%/target/*}/pom.xml.flattened ${!jar%.jar}.pom.xml; done
                 - aws s3 cp --recursive --quiet --exclude '*' --include '*.jar' --include '*.pom.xml' --exclude 'original-*' flink-*/flink-connectors/flink-connector-kinesis/target s3://${ArtifactBucket}/artifacts/
 
           artifacts:
